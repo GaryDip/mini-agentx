@@ -1,261 +1,371 @@
-# 06：Brainstorm Agent——从论文机制到工具调用
+# 06：动手实现 Brainstorm Agent
 
-本章整合任务契约、DeepSeek 生成、主动调查与行动日志。阅读这一篇就能完成本阶段，不需要来回切换三个文件。当前实现可以读取系统、实验和训练统计，生成并校验提案；实际修改代码和训练候选属于下一阶段 Developing，目前尚未实现。
+这章按写代码的顺序学习已有实现：先定义输入，再写一个工具，接上模型调用循环，最后校验提案并保存日志。代码已经在仓库里，你不需要重新复制一套；请打开对应文件，把每段代码与下面的解释对照起来。文中的练习可以直接在项目根目录运行，前面的练习不需要 API 密钥。
 
-## 1. 先把论文问题转成实现任务
+完成后，你应当能够自己给 agent 增加一个只读工具，并解释它如何从“模型请求”变成“真实执行”，以及工具结果如何影响下一次请求。
 
-阅读 [AgentX §4 与附录 C.1](https://arxiv.org/html/2606.26859v2#S4)。论文在本章的学习主线是：明确任务边界，调查证据，探索候选，再把可执行方案交给开发。本项目采用本地文件与 Python 函数实现这些职责；下面的 JSON 协议、固定预算和必读检查是教程工程选择。
+## 开始前：先认清我们要写什么
 
-| 实现步骤 | 论文对应与类型 | 本地输入 → 输出 | 代码位置 | 保留及简化 |
-| --- | --- | --- | --- | --- |
-| 明确任务 | §4.1；简化 | 人工范围 → TaskBoundary | configs/brainstorm-task.json、agents/brainstorm_contracts.py | 明确目标与约束；未自动澄清用户需求 |
-| 准备初始事实 | §4.3；简化 | 父模型报告 → context | agents/brainstorm_context.py | 事实有来源；无动态证据权重 |
-| 调查系统 | §4.3.2；简化 | 文件查询 → 系统证据 | tools/brainstorm.py | 读取真实代码；本地白名单替代工业系统 KB |
-| 调查实验 | §4.3.1；简化 | run ID → 验证历史 | tools/brainstorm.py | 查询本地报告；尚无完整失败记忆 |
-| 分析数据 | §4.3.3；简化 | 训练数据 → 分布统计 | tools/brainstorm.py | 真实统计；无工业 SQL |
-| 小批候选 | §4.2；简化 | 调查上下文 → 三个候选 | agents/brainstorm.py | 成熟度与优先级；仅一批，无残余探索循环 |
-| 校验与交接 | §4.4；简化 | 候选 → selected_proposal | agents/brainstorm_contracts.py | 结构化验证；不替代代码审查或生产人工审核 |
-| 保存轨迹 | §3；工程支撑 | 每个动作 → 本地日志 | agents/activity_log.py | 可追溯；尚未接 SQLite |
+对照 [AgentX §4](https://arxiv.org/html/2606.26859v2#S4)：任务边界对应 §4.1，小批候选对应 §4.2，系统/实验/数据证据对应 §4.3，提案交接对应 §4.4。这里用本地文件和 Python 函数做简化实现。JSON action 协议、必读检查与固定次数预算是教程的工程选择，论文未规定这些具体写法。
 
-§4.3.4 的外部论文检索仍未实现。每一步的验证方式在后文给出；提案合法不代表模型已经获得提升。
+先打开这些文件，按顺序阅读：
 
-## 2. 建立清晰的模块分工
+1. [brainstorm-task.json](../../configs/brainstorm-task.json)：这次优化允许做什么。
+2. [brainstorm_context.py](../../src/mini_agentx/agents/brainstorm_context.py)：已有事实从哪里来。
+3. [tools/brainstorm.py](../../src/mini_agentx/tools/brainstorm.py)：程序可以执行哪些调查。
+4. [agents/brainstorm.py](../../src/mini_agentx/agents/brainstorm.py)：模型与工具如何反复交互。
+5. [brainstorm_contracts.py](../../src/mini_agentx/agents/brainstorm_contracts.py)：什么样的方案能进入下一阶段。
 
-从仓库根目录阅读以下文件，路径均相对 `src/mini_agentx/`：
+不要从整段 prompt 开始背字段。我们先做出一次真实工具调用，再接上循环。整个程序最终应该完成：
 
-| 模块 | 要解决的问题 |
-| --- | --- |
-| cli.py | 解析命令，准备上下文、客户端和工具，启动 agent |
-| agents/brainstorm_context.py | 从父实验挑选允许公开的事实 |
-| agents/brainstorm_contracts.py | 定义任务、提案和交接的合法格式 |
-| tools/brainstorm.py | 提供真实只读函数，校验工具名、参数和访问范围 |
-| llm/client.py | 将 messages 发给 DeepSeek，解析 JSON，返回 usage 与延迟 |
-| agents/brainstorm.py | 保存对话状态，路由动作，反馈结果，限制循环，校验提案 |
-| agents/activity_log.py | 将动作、公开说明和结果按时间写入同一个文件 |
-
-三个 agent 是三个职责边界，不要求启动三个进程。Brainstorm 的每次 `client.complete(messages)` 都是一次独立请求；程序把之前的请求和结果继续放入 messages，因此模型能基于上一轮观测选择下一步。
-
-## 3. 第一步：定义允许优化的范围
-
-修改 `configs/brainstorm-task.json`，再由 `TaskBoundary` 校验。当前目标是固定验证集上的 NDCG@10，每批三个候选，候选训练预算 60 秒。
-
-| 字段 | 实现意义 |
-| --- | --- |
-| schema_version、task_id | 防止不同任务或格式被混用 |
-| objective、primary_metric | 固定优化目标和比较口径 |
-| allowed_files | 候选目录里的 model.py 与 training.toml |
-| forbidden_changes | 数据划分、评估器、模拟器、测试结果、密钥、编排程序不可改 |
-| constraints、unknowns | 记录执行条件与尚未知道的事实 |
-| candidate_count、max_training_seconds | 限制提案数量与后续实验预算 |
-
-**当前允许修改模型。** `model.py` 可改变表示与打分，但必须兼容现有训练接口；`training.toml` 可改 dimensions、learning_rate、batch_size、epochs、l2、threads。BPR 损失与负采样位于固定训练器，这一版不开放修改。可读文件和可改文件是两套权限，例如 agent 可以读 train.py，但不能把修改训练器的方案交接为当前可实施方案。
-
-Brainstorm 只输出修改计划。60 秒是交接给未来训练工具的约束，当前并没有候选执行器来强制执行它；不要把文字约束当成已经落地的代码隔离。
-
-## 4. 第二步：把父实验转成证据上下文
-
-运行 `brainstorm-context` 可以单独学习这一层：
-
-```bash
-mini-agentx brainstorm-context --baseline-run <你的基线run_id>
+```text
+任务 + 初始证据 → 模型请求调查 → Python执行 → 观测反馈
+                         ↑                    ↓
+                         └──── 下一次请求 ────┘
+                                  ↓
+                          提案 → 校验 → 交接
 ```
 
-`build_context` 校验父权重摘要，读取报告白名单，输出任务、parent_run_id、dataset_version、evidence、avoid_set。初始证据包括：
+## 第 1 步：用数据结构固定任务边界
 
-| evidence_id | 状态 | 内容 |
-| --- | --- | --- |
-| system-model | documented | 模型表示、维度、训练逻辑及修改范围 |
-| baseline-validation | observed | 父实验真实验证指标、最佳轮次和耗时 |
-| popularity-validation | observed | 热门推荐的真实验证结果 |
+**要实现什么：** 把“优化推荐系统”变成程序能够检查的输入。否则模型可能为了提高指标改评估器，也可能提出当前训练器不支持的方案。
 
-每条证据使用 `evidence_id/source/status/facts`。documented 表示系统描述，observed 表示程序观测，hypothesis 则属于后面的待验证提案。上下文没有测试指标、原始用户记录、完整 API 配置或私有模拟参数。avoid_set 当前通常为空，尚未自动从失败记忆生成。
+打开 brainstorm-task.json，先找 objective、primary_metric、allowed_files、constraints。当前允许修改候选 model.py 的表示与打分，以及 training.toml 的已有训练参数；BPR 损失、负采样算法、数据划分与评估器固定。候选目录尚未由 Developing 创建，Brainstorm 只写计划。
 
-验收：打开输出的 context.json，检查父实验和数据版本，找到真实验证数值，确认没有测试结果。
-
-## 5. 第三步：把读取能力封装成工具
-
-在 `BrainstormTools.SPECS` 描述工具输入；在 `execute(name, arguments)` 执行对应 Python 函数。SPECS 让模型知道可以请求什么，execute 才是真正执行动作的地方。
-
-| 工具 | arguments | 返回内容 | 为什么要用 |
-| --- | --- | --- | --- |
-| list_files | {} | 可读文件路径 | 发现调查范围 |
-| read_file | {"path":"白名单相对路径"} | path、content、sha256 | 理解模型接口和实现位置 |
-| list_experiments | {} | 最多 30 个实验摘要 | 查找本地可参考实验 |
-| read_experiment | {"run_id":"实验ID"} | 验证历史及训练参数，或模型模式模拟 A/B 观测 | 了解父模型表现与已有结果 |
-| training_data_summary | {} | 用户、物品、交互量和流行度统计 | 给优化假设提供训练分布依据 |
-
-read_file 白名单是 model.py、train.py、evaluate.py、configs/baseline.toml、configs/brainstorm-task.json；单文件最多 24,000 字节。工具校验参数字段、规范化路径和符号链接，拒绝任意 shell、.env、测试文件和 simulator_private.json。
-
-read_experiment 只接受 baseline/ab 加 12 位十六进制 ID。训练报告只暴露指定字段；模拟 A/B 只开放 model 模式，去掉规则答案，并明确 simulated。人为注入“改善/恶化”的场景不能作为模型优化证据。
-
-training_data_summary 读取父实验的 train.csv，先检查数据版本与摘要，再统计交互数、用户数、物品数、每用户交互分布、前十热门物品占比、交互不超过五次的物品数量。它不读取验证或测试标签，不返回原始用户 ID。
-
-这些检查是 Python 工具接口边界；目前没有生成代码执行工具，因此不应声称已经实现通用执行沙箱。
-
-## 6. 第四步：实现模型驱动的工具调用循环
-
-当前采用 **JSON action 协议**，不是 DeepSeek 原生 function calling。API 返回普通 JSON，程序解释 action 并执行工具。这样可以先学习工具路由和状态传递，再决定是否升级接口。
-
-```mermaid
-sequenceDiagram
-    participant P as Python 编排程序
-    participant L as DeepSeek
-    participant T as BrainstormTools
-    P->>L: system prompt + task/context + 工具定义
-    L-->>P: action=tool，name，arguments，reason
-    P->>T: 检查预算并 execute(name, arguments)
-    T-->>P: source/facts 或错误
-    P->>P: 追加证据，保存行动日志
-    P->>L: 原对话 + assistant action + user tool_result
-    L-->>P: 下一次 tool 或 propose
-    P->>P: validate_batch，保存交接或反馈错误
-```
-
-例如模型请求读取模型文件：
-
-```json
-{
-  "action": "tool",
-  "name": "read_file",
-  "arguments": {"path": "src/mini_agentx/recommender/model.py"},
-  "reason": "确认模型表示与打分接口，判断方案应该落在哪个文件。"
-}
-```
-
-这是协议示例，不是某一次调用的原始响应。程序按以下顺序处理：
-
-1. 检查 action 字段、reason 类型与长度，以及工具预算。
-2. `tools.execute` 校验工具名、参数与路径，执行真实读取。
-3. 成功时构造 `tool-N` 证据，将它追加到 `context.evidence`。
-4. 将模型 action 以 assistant 消息保存，将工具结果以 user 消息返回。
-5. 再次调用模型，使新观测参与下一次选择。
-
-工具结果的协议形状为：
-
-```json
-{
-  "tool_result": {
-    "evidence_id": "tool-1",
-    "source": "system_kb",
-    "status": "observed",
-    "facts": {"path": "...", "content": "文件原文", "sha256": "..."}
-  }
-}
-```
-
-工具失败时返回 `tool_error`，保存拒绝原因，但不追加事实证据。失败的工具请求也占工具预算。tool-N 按请求序号产生，失败可能使成功证据的序号不连续。
-
-下面是用于理解的伪代码，实际异常与持久化逻辑见 `generate_proposals`：
+再打开 brainstorm_contracts.py，看 `TaskBoundary.from_dict` 的入口：
 
 ```python
-messages = [system_prompt, context_message]
-for _ in range(max_model_calls):
-    action, metadata = client.complete(messages)
-    if action["action"] == "tool":
-        observation = execute_and_record(action)
-        messages += [assistant(action), user(observation)]
-        continue
-    batch = action["batch"]
-    handoff = validate_batch(batch, context)
-    save_and_finish(batch, handoff)
-    break
+require_fields(value, cls.__dataclass_fields__, "TaskBoundary")
+if type(value["schema_version"]) is not int or value["schema_version"] != 1:
+    raise ValueError("不支持的任务版本")
+for name in ("task_id", "objective", "primary_metric"):
+    text(value[name], name)
+if value["primary_metric"] != "ndcg@10":
+    raise ValueError("首版固定使用验证 ndcg@10")
 ```
 
-最低调查要求是成功读取模型文件、父实验与训练统计；程序用 inspected 集合检查三项是否完成，不强制三项的执行顺序。其他调查由模型选择。这个必读要求是教程约束，不是论文规定的固定动作列表。选中提案还必须引用至少一条本轮工具新获得的证据，防止调查后完全忽略观测。
+`require_fields` 拒绝缺失或额外字段。`type(...) is int` 还避免把 Python 的 True 当成整数 1。`primary_metric` 的检查让后续候选在相同口径上比较。dataclass 负责字段结构，from_dict 才负责运行时检查；只写类型标注并不能阻止错误 JSON。
 
-reason 是一两句公开行动目的与依据，若提供必须是非空且不超过 1,000 字符；缺失时不编造。它帮助阅读日志，不是内部完整思维链，也不证明因果假设正确。
+**动手检查：** 在终端执行下面整块命令。这里的 Python 放在 heredoc 中，不是把文件内容逐行当 shell 命令执行。
 
-## 7. 第五步：生成可验证、可交接的候选
+```bash
+python - <<'PYCODE'
+import json
+from pathlib import Path
+from mini_agentx.agents.brainstorm_contracts import TaskBoundary
+value = json.loads(Path("configs/brainstorm-task.json").read_text())
+print(TaskBoundary.from_dict(value).allowed_files)
+value["primary_metric"] = "ctr"
+try:
+    TaskBoundary.from_dict(value)
+except ValueError as error:
+    print("预期拒绝：", error)
+PYCODE
+```
 
-模型结束调查后返回 `{"action":"propose","batch":完整批次,"reason":"简短依据"}`。batch 包含 schema_version、task_id、parent_run_id 和 proposals。
+先看到允许修改的文件，再看到指标被拒绝。这个练习只改内存中的字典，不修改你的配置。
 
-| 每条提案字段 | 应该写什么 |
-| --- | --- |
-| proposal_id、title | 可引用的 ID 和标题 |
-| mechanism_key、priority | 不重复的机制标识及唯一正整数优先级 |
-| maturity | ready、probe_first 或 backlog |
-| hypothesis | 待验证机制，不把猜测写成已证实原因 |
-| evidence_refs | evidence_id、facts 的直接 field、原始类型的 value |
-| changes | 候选文件及具体修改计划 |
-| validation | 固定指标、方向、同数据同种子比较、观测项和证伪条件 |
-| risks、probes | 风险及阻塞性调查 |
+## 第 2 步：给模型准备初始上下文
 
-例如将维度从 32 改成 64，修改位置是 training.toml；若假设是“容量更大可能提高排序质量”，应以父验证指标作为对照，并写明没有提升或耗时越界时如何拒绝假设。物品数量和指标低并不能直接证明容量不足。
+**要实现什么：** 从父实验提取事实，避免直接把整个报告扔给模型。对应论文 §4.3 的证据输入。
 
-ready 必须有修改计划且 probes 为空；probe_first 必须给出阻塞性调查；backlog 保留暂不能实施的方向。最高优先级 ready 被选中；全批没有 ready 则 needs_evidence，不生成可执行 proposal.json。
+打开 brainstorm_context.py 的 build_context，先看读取与完整性检查：
 
-`validate_batch` 检查版本、父实验、数量、字段、路径、白名单、指标、证据 ID/字段/值、重复 ID/机制/优先级以及 avoid_set。数值 32 与字符串 "32" 不可互换。任何一个候选非法会拒绝整个批次。
+```python
+task = json.loads(Path(task_path).read_text())
+TaskBoundary.from_dict(task)
+baseline = Path(baseline)
+report = json.loads((baseline / "report.json").read_text())
+checkpoint_hash = hashlib.sha256((baseline / "model.pt").read_bytes()).hexdigest()
+if checkpoint_hash != report["checkpoint_sha256"]:
+    raise ValueError("基线权重摘要不匹配")
+```
 
-校验只能保证格式、范围和引用一致，不能证明引用支持因果假设、机制没有语义重复或修改计划一定可实施。历史真实调用曾将负采样修改放进 model.py：路径合法，但实现位置错误。后续 Developing 还需要读取代码、检查接口和训练验证。
+task 的结构先被校验，再检查 model.pt 与报告是否匹配。接下来的 context 字典保留 parent_run_id 和 dataset_version，让后续提案知道自己基于哪个模型、哪一版数据。
 
-## 8. 第六步：控制预算与失败修复
+重点阅读 `evidence` 列表，而不是只关注指标数值。每条证据有固定 ID、source、status、facts。system-model 是 documented 系统说明；baseline-validation 和 popularity-validation 是 observed 实验观测。模型提出的原因解释应该写入 hypothesis，不能混进 observed 事实。
 
-配置文件为 `configs/brainstorm-llm.toml`：
+**动手检查：** 先运行 `mini-agentx brainstorm-context --baseline-run <你的基线ID>`，然后打开命令输出的 context_path。找到 baseline-validation 的 ndcg@10，再对照父实验 report.json。确认值来自真实报告，并找出为什么没有测试指标。这个命令不会调用 LLM。
 
-| 配置 | 当前值 | 实际含义 |
-| --- | --- | --- |
-| workflow.max_model_calls | 8 | 包含调查、提案、API 失败和修复的总请求次数 |
-| workflow.max_tool_calls | 6 | 包含被执行后拒绝的工具请求 |
-| llm.max_attempts | 2 | Brainstorm 中用于累计无效输出上限，不是每个动作再重试两遍 |
-| llm.max_tokens | 4500 | 每次响应的输出上限 |
-| llm.timeout_seconds | 45 | 每次网络请求超时 |
+## 第 3 步：先写一个不依赖 LLM 的工具
 
-客户端一次 complete 发一次请求，循环负责重试。无效 action 或批次返回明确校验错误，追加到 messages，让模型在剩余预算内修复。达到两次无效输出停止；不可恢复 HTTP 4xx 停止，429 与网络错误可在总预算内继续。预算耗尽仍无合法批次则 failed，保留诊断而不伪造成功。
+**要实现什么：** 提供一个输入明确、结果明确、可以单独测试的 Python 函数。我们先从 read_file 入手，对应论文 §4.3.2 的系统调查。
 
-DeepSeek 客户端只从环境变量/.env 读取密钥，环境变量优先。密钥用于认证 header，不进入 prompt 和日志。JSON 输出模式只帮助解析；合法 JSON 仍须通过以上检查。
+打开 tools/brainstorm.py。`SPECS` 是给模型看的说明书，`FILES` 是程序允许访问的文件。`execute` 才执行工具：
 
-## 9. 运行一次，并按日志学习
+```python
+def execute(self, name, arguments):
+    if name not in self.SPECS:
+        raise ValueError("未知或禁止的工具")
+    if not isinstance(arguments, dict) or set(arguments) != set(self.SPECS[name]["arguments"]):
+        raise ValueError("工具参数字段不符合定义")
+    if name == "list_files":
+        return "system_kb", {"paths": list(self.FILES)}
+    if name == "read_file":
+        path = arguments["path"]
+        if not isinstance(path, str) or path not in self.FILES:
+            raise ValueError("文件不在只读白名单")
+        target = self.safe_file(self.root, path)
+        if target.stat().st_size > 24000:
+            raise ValueError("文件超过读取大小上限")
+        return "system_kb", {"path": path, "content": target.read_text(),
+                              "sha256": hashlib.sha256(target.read_bytes()).hexdigest()}
+```
 
-先完成数据与基线，配置项目根目录的 .env，再执行：
+顺着分支逐行看：
+
+1. 工具名必须在 SPECS 中，模型不能凭空发明 shell 工具。
+2. arguments 必须是字典，并且字段集合与定义完全一致。
+3. read_file 的 path 必须在 FILES 中；read 权限与候选 write 权限分开。
+4. safe_file 拒绝符号链接并检查解析后的路径范围。
+5. 限制文件大小后返回 `(source, facts)`，其中 content 是实际文件内容，sha256 用于标识读到的版本。
+
+**动手调用真实工具：**
+
+```bash
+python - <<'PYCODE'
+from pathlib import Path
+from mini_agentx.tools.brainstorm import BrainstormTools
+root = Path.cwd()
+tools = BrainstormTools(root, root / "runs", {"parent_run_id": "unused"})
+source, facts = tools.execute("read_file", {
+    "path": "src/mini_agentx/recommender/model.py"
+})
+print(source, facts["path"])
+print(facts["content"])
+try:
+    tools.execute("read_file", {"path": ".env"})
+except ValueError as error:
+    print("预期拒绝：", error)
+PYCODE
+```
+
+这个练习无需父实验或 API：read_file 不使用 parent_run_id。你已经执行了一次 agent 的真实工具，只是工具名由你指定。下一步让模型选择工具名。
+
+另外四个工具也用同一个 execute 入口：list_files 返回可读路径；list_experiments 查本地实验摘要；read_experiment 筛选验证历史或模型模式模拟 A/B；training_data_summary 检查训练数据摘要后计算分布。实验查询不开放注入收益的模拟场景，训练统计不读取留出标签。
+
+## 第 4 步：让模型输出“动作”，而不是一段建议
+
+**要实现什么：** 给程序一个可以路由的响应协议。打开 agents/brainstorm.py 的 tool_prompt，找到这两种格式：
+
+```json
+{"action":"tool","name":"read_file","arguments":{"path":"src/mini_agentx/recommender/model.py"},"reason":"确认模型接口与打分实现。"}
+```
+
+```text
+{"action":"propose","batch":完整候选批次,"reason":"简短的选择依据"}
+```
+
+上面是协议示例，不是一次真实响应。action=tool 表示继续调查，action=propose 表示结束调查并提交批次。reason 请求一两句公开的行动目的，便于阅读日志；它不是内部完整思维链，也不证明方案有效。
+
+我们使用普通 JSON 输出，不是原生 function calling。因此工具不会因为模型输出名字就自动执行；接下来必须自己写 action 检查与 Python 路由。
+
+**阅读客户端：** 打开 llm/client.py 的 complete。messages 被发送到 chat/completions，response_format 请求 JSON，响应 content 被 json.loads 解析。complete 一次只发一次请求，返回 `(output, metadata)`。解析成功只说明输出是 JSON，不能保证工具名合法或证据正确。
+
+## 第 5 步：创建对话状态，启动循环
+
+**要实现什么：** 保留上一轮观测，让下一次请求知道刚刚发生了什么。打开 generate_proposals，找到 messages 与 inspected 初始化：
+
+```python
+messages = [{"role": "system", "content": system_prompt},
+            {"role": "user", "content": json.dumps(context, ensure_ascii=False)}]
+attempts = []
+tool_history = []
+inspected = set()
+```
+
+system_prompt 定义职责、约束、协议和工具说明；第一条 user 消息携带 task/context。messages 是模型每次请求的对话历史，context 是程序保存的事实集合，tool_history 是工具执行记录，inspected 是最低调查完成状态。四者用途不同。
+
+循环调用模型的部分是：
+
+```python
+for index in range(max_calls):
+    activity.record(f"调用模型：第 {index + 1} 次")
+    try:
+        candidate, metadata = client.complete(messages)
+    except LLMError as error:
+        attempts.append({"attempt": index + 1, "status": "api_failed", "error": str(error)})
+        activity.record("模型调用失败", result={"error": str(error)})
+        if "HTTP 4" in str(error) and "HTTP 429" not in str(error):
+            break
+        continue
+```
+
+网络或 API 错误会被记录。不可恢复 4xx 停止，429 等错误可在剩余总次数内继续。这里没有“无限自动重试”，每个循环都消耗总模型调用预算。
+
+## 第 6 步：执行工具，把结果变成可引用证据
+
+**要实现什么：** 将模型请求路由到第 3 步的真实工具，并把结果放进 context。先读 action 类型、字段和工具预算检查，再读这段成功分支：
+
+```python
+source, facts = tools.execute(candidate["name"], candidate["arguments"])
+evidence = {"evidence_id": f"tool-{len(tool_history) + 1}",
+            "source": source, "status": "observed", "facts": facts}
+context["evidence"].append(evidence)
+entry.update(status="success", evidence=evidence)
+```
+
+工具返回 source/facts，编排器添加 evidence_id 与 observed 状态，得到统一证据格式。context.evidence.append 让后面的提案校验器能够找到这条证据。entry 保存同一次执行结果，用于日志。
+
+tool-N 的 N 按工具请求次数生成，失败请求也计数，所以成功证据 ID 可能不连续。不要用 ID 的连续性判断有没有丢数据。
+
+继续往下看 inspected：成功读到 model.py 标记 model，成功读父实验标记 parent，成功查询训练统计标记 training。提交提案前要求这三项都完成；执行顺序不由集合固定。这个必读检查是本地教程的工程约束。
+
+工具异常产生 tool_error，记录拒绝但不添加 observed 证据。看完这里，你应能回答：为什么读取 .env 被拒绝后，模型不会得到密钥，也不能把错误当成事实引用？
+
+## 第 7 步：把工具结果送回模型——循环最关键的一步
+
+**要实现什么：** 让模型真正看到执行结果，而不是仅在磁盘上保存它。继续读同一函数：
+
+```python
+tool_history.append(entry)
+activity.record(f"工具结果：{candidate['name']}", result=entry.get("evidence", {"error": entry.get("error")}))
+record["status"] = "tool_action"
+attempts.append(record)
+messages.extend([
+    {"role": "assistant", "content": json.dumps(candidate, ensure_ascii=False)},
+    {"role": "user", "content": json.dumps(observation, ensure_ascii=False)},
+])
+continue
+```
+
+这段代码有两个不同的效果：activity 和 attempts 保存给人看的执行记录；messages.extend 把请求与观测交给下一次模型调用。只写日志、不追加 messages，模型就不知道工具实际返回了什么。
+
+assistant 消息保存模型自己的 action；user 消息包含 Python 返回的 tool_result 或 tool_error。因为采用普通 JSON 协议，这里没有使用原生 tool role。continue 回到循环头，下一次 complete 接收到扩展后的对话。
+
+**跟踪一次状态：** 对照 tests/test_brainstorm_tools.py 的 `test_investigation_results_become_citable_evidence`。FakeClient 顺序返回三个 tool action 与一个 propose。第三个工具返回 users=2，最终提案引用 tool-3.users=2。这个测试让你在不用 API 的情况下看到“请求 → 结果 → 可引用证据”完整链路。
+
+```bash
+python -m unittest discover -s tests -p 'test_brainstorm_tools.py' -v
+```
+
+这里的 StubTools 和 FakeClient 是教学测试替身，不代表真实文件或真实 DeepSeek。第 3 步已经单独调用过真实文件工具，两种验证解决不同问题。
+
+## 第 8 步：接住提案，检查它能不能交接
+
+**要实现什么：** 从合法 JSON 走到可交接方案。打开 brainstorm_contracts.py 的 Proposal.from_dict，重点看引用检查：
+
+```python
+for reference in references:
+    require_fields(reference, ("evidence_id", "field", "value"), "evidence_ref")
+    if not isinstance(reference["evidence_id"], str) or reference["evidence_id"] not in evidence:
+        raise ValueError("引用了不存在的 evidence_id")
+    field = text(reference["field"], "field")
+    actual = evidence[reference["evidence_id"]]["facts"].get(field)
+    if field not in evidence[reference["evidence_id"]]["facts"] or not same_value(reference["value"], actual):
+        raise ValueError(f"证据字段或数值不匹配：{reference['evidence_id']}.{field}；必须使用原始 JSON 值 {actual!r}（{type(actual).__name__}），不能将数值转成字符串")
+```
+
+校验器按 evidence_id 找证据，再从 facts 的直接字段取值。32 与 "32" 不能混用；未知 ID、字段或错误值都会被拒绝。它证明引用一致，不证明这条事实支持因果假设。
+
+然后阅读 changes、validation 和 maturity 检查：ready 需要修改计划且不能有阻塞 probes；probe_first 必须说明先调查什么；backlog 表示当前条件不足。validation 固定主指标与同数据同种子的对照方法，还要求 observables 与 falsification。
+
+最后 validate_batch 选择可交接提案：
+```python
+ready = sorted((item for item in proposals if item.maturity == "ready"), key=lambda item: item.priority)
+```
+
+这是现有选择语句：数字越小优先级越高，取第一个 ready；没有 ready 则 needs_evidence。上面的数量、任务/父实验匹配和重复机制检查针对整批执行，一个候选不合格就整批拒绝。
+
+回到 generate_proposals，你还会看到选中提案必须引用本轮成功调查证据的检查。它避免“工具都读了，但方案完全忽略新观测”。ready 仍只是通过契约，Developing 还需要判断计划是否能在真实代码中实施。
+
+**动手制造一次校验错误：**
+
+```bash
+python - <<'PYCODE'
+import json
+from pathlib import Path
+from mini_agentx.agents.brainstorm_contracts import validate_batch
+base = Path("examples/brainstorm")
+context = json.loads((base / "context.json").read_text())
+batch = json.loads((base / "proposals.json").read_text())
+print("原始交接：", validate_batch(batch, context)["handoff_status"])
+batch["proposals"][0]["changes"][0]["file"] = "../evaluate.py"
+try:
+    validate_batch(batch, context)
+except ValueError as error:
+    print("预期拒绝：", error)
+PYCODE
+```
+
+示例数据是 synthetic_example。练习只修改内存，不改评估器或示例文件。
+
+## 第 9 步：给模型一次修复机会，设置停止条件
+
+**要实现什么：** 把明确错误反馈给模型，同时避免无限循环。读 generate_proposals 的校验异常分支：
+
+```python
+except ValueError as error:
+    record.update(status="invalid_output", error=str(error))
+    activity.record("程序校验失败", result={"error": str(error), "response": record["response"]})
+    attempts.append(record)
+    invalid_outputs += 1
+    if invalid_outputs >= client.config["max_attempts"]:
+        break
+    messages.extend([
+        {"role": "assistant", "content": json.dumps(record["response"], ensure_ascii=False)},
+        {"role": "user", "content": f"校验失败：{error}。按原始任务及证据修复。" +
+         ("保持 action 协议，提案用 propose 包装完整 batch。" if tools is not None else "返回完整 JSON 批次。")},
+    ])
+    continue
+```
+
+错误响应以 assistant 消息保存，具体校验错误以 user 消息追加；下一轮仍基于同一个任务与原证据修复。invalid_outputs 累计到 max_attempts 后停止，不是每次工具再重试两遍。
+
+打开 configs/brainstorm-llm.toml：总模型请求最多 8 次，工具请求最多 6 次，无效输出最多 2 次，每次输出最多 4,500 token，网络超时 45 秒。被拒绝的实际工具请求也占工具次数，API 错误也占模型次数。
+
+```bash
+python -m unittest discover -s tests -p 'test_brainstorm_agent.py' -v
+```
+
+读 `test_repair_then_persist_handoff`：第一次路径越界，第二次返回合法批次；断言 trace 状态从 invalid_output 变为 valid。再读 budget_failure：所有尝试失败时保存 failed，没有成功 handoff。
+
+## 第 10 步：保存日志与下游输入
+
+**要实现什么：** 让人可以复查整个过程，让 Developing 可以继续处理。打开 activity_log.py 的 record，它每次追加 activity.jsonl 和 activity.md，而不是等结束才一次性写日志。因此运行中就能看到请求、公开理由、结果和校验。
+
+接着读 generate_proposals 最后保存产物的部分：context.json 保存调查后的证据；tools.json 保存执行记录；trace.json 保存 prompt、响应、usage 与错误。通过校验才保存 proposals.json 和 handoff.json；只有选中 ready 才写 proposal.json，包含任务、父实验、数据版本与选中方案。
+
+activity.md 是阅读入口，proposal.json 是下一阶段输入。API 密钥不会进入这些文件，内部思维链不记录。当前统一日志只接到 Brainstorm，Evaluation 仍用自己的 evidence/trace/assessment 文件。
+
+## 第 11 步：用 CLI 把刚才的组件接起来
+
+打开 cli.py 的 brainstorm 分支，看组合代码：
+```python
+context = json.loads(Path(context_path).read_text())
+tools = BrainstormTools(Path.cwd(), runs, context)
+result = generate_proposals(context_path, runs, DeepSeekClient(args.llm_config), tools=tools)
+```
+
+这三行摘自实际 CLI。之前的分支根据 --baseline-run 调用 build_context，或者接受 --context；然后构造客户端与工具，交给 generate_proposals。agent 不需要框架才能工作，核心是明确的接口和有限循环。
+
+配置好 .env 后，在项目根目录执行：
 
 ```bash
 conda activate mini-agentx
 mini-agentx brainstorm --baseline-run <你的基线run_id>
 ```
 
-本机已有基线 `baseline-c30ead6da742`；其他机器需要自己的 ID。默认使用 brainstorm-task.json 与 brainstorm-llm.toml，可通过 --task、--llm-config 覆盖；也可传 --context 使用已有上下文，与 --baseline-run 互斥。
+本机已有 baseline-c30ead6da742，其他机器用自己的 ID。默认任务文件是 brainstorm-task.json，LLM 配置是 brainstorm-llm.toml，可通过 --task、--llm-config 覆盖。该命令会消耗 DeepSeek API，不会修改模型、训练候选或启动 A/B。
 
-打开命令输出的 activity_log 路径，按下面的顺序阅读：
+打开输出的 activity_log，选一次 read_file，沿着请求参数、返回的 tool-N、最终 evidence_refs 追踪。再对照源码，看自己能否指出 messages.extend、context.evidence.append、validate_batch 各负责哪一段。
 
-1. 开始任务：确认目标、权限与父实验。
-2. 请求工具：看公开说明，判断它希望获取什么证据。
-3. 工具结果：核对真实返回是否回答了问题。
-4. 候选批次：检查假设如何引用证据，有没有把猜测当成事实。
-5. 校验与交接：确认选中原因，记下还需要下游验证的风险。
+## 第 12 步：练习给 agent 增加一个工具
 
-本地真实运行 `brainstorm-463feb9fa5af` 使用 5 次模型调用、4 次工具调用，读取模型、父实验、训练统计和实验列表，随后生成三个候选，选中维度 32→64。候选未训练，没有收益结论。模型和新 run ID 每次可能不同，历史运行目录不随仓库发布。
+理解调用循环后，尝试在本地增加只读工具 `model_parameter_count`，统计父模型配置对应的参数量。当前 BPR-MF 无偏置，参数量可由 `(users + items) * dimensions` 计算，但必须从可信父实验/数据元信息取得输入，不能用模型自己编造的数量。
 
-## 10. 理解每个产物在闭环中的作用
+这是练习要求，当前仓库**尚未提供这个工具**。按以下顺序动手：
 
-产物位于 `runs/brainstorm-<id>/`，均留在本地：
+1. 在 BrainstormTools.SPECS 增加名字、空 arguments 与说明。
+2. 在 execute 增加分支，复用安全路径读取与完整性检查，返回 source/facts，包含参数量、维度、模型类型及数据版本。
+3. 加一个独立工具测试，校验返回值，并检查不会读取测试标签或密钥。
+4. 在调用循环测试中插入该 action，并让提案引用新证据；检查消息回传与引用校验。
+5. 最后才用真实 API 验证模型是否会根据需要选择它。它不属于必读项，不必修改 inspected。
 
-| 文件 | 阅读或下游用途 |
-| --- | --- |
-| activity.md | 单文件时间线，逐事件写入，可在运行中查看；UTC+08 |
-| activity.jsonl | 对应结构化事件，便于以后可视化 |
-| context.json | 初始上下文加本轮成功调查证据 |
-| tools.json | 工具参数、公开理由、成功结果与拒绝原因 |
-| trace.json | system prompt、模型响应、usage、延迟与校验错误 |
-| proposals.json | 通过契约的完整批次 |
-| handoff.json | 选择结果、父实验与数据版本 |
-| proposal.json | 有 ready 时的下游输入，携带 task、父实验、数据版本与选中提案 |
-| status.json | ready、needs_evidence 或 failed |
+如果工具采用现有 `(source, facts)` 返回协议，就不需要在 generate_proposals 再加同名分支：通用 execute 路由已经负责调用。这是把工具与编排分开的价值。
 
-消息可由初始证据、工具请求/结果和修复错误重建，trace 不是每次完整 messages 的独立快照。API 密钥与内部思维链均不记录。旧运行不会凭空获得新的公开行动理由。
+## 接下来要写的代码
 
-## 11. 检查自己是否理解，并验证实现
+Developing 输入 proposal.json，计划提供候选文件读写、接口检查、固定训练入口和诊断工具，复用同一种请求/执行/反馈循环。它尚未实现；执行隔离、训练超时和有限修复要在这一阶段落实。完整实验记忆、外部论文检索、动态证据权重和多批探索也仍在后续范围。
 
-```bash
-mini-agentx check-proposals --context examples/brainstorm/context.json --proposals examples/brainstorm/proposals.json
-python -m unittest discover -s tests -v
-```
-
-examples 是标记 synthetic_example 的手写教学数据，不是 LLM 真实响应。测试使用 mock 覆盖有限修复、无 ready、预算失败、越界工具、证据引用和行动日志等路径；真实 API 运行单独记录，不能混为一类证据。
-
-学习验收：你应能解释是谁执行工具、工具结果如何进入下一次请求、为什么不能改评估器、ready 与效果已验证有什么区别、失败为什么也要保存。尝试沿 activity.md 的一个 evidence_id 找到 proposal.json 中的引用，核对字段与类型；再阅读 execute 和 generate_proposals 对应分支。
-
-## 12. 接下来如何接 Developing
-
-下一章输入是 proposal.json。计划创建独立候选目录，复制父模型和配置，提供读取/写入候选文件、检查接口、固定训练入口和读取诊断的工具，复用“请求工具 → 执行 → 返回 → 再请求”的循环。训练后把实际指标交给 Evaluation，再写实验记忆。
-
-这些工具和完整闭环尚未实现。下一章必须落实执行隔离、超时与修复边界；当前只读工具的白名单不能直接当作生成代码执行的隔离方案。
+继续学习 [Evaluation 教程](05-evaluation-agent.md)，比较“主动工具调查”与“固定证据分析”两种流程；再按 PLAN.md 进入 Developing。

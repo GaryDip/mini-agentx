@@ -1,5 +1,7 @@
 # 05：Evaluation Agent——从实验证据到可核查判断
 
+先打开 [evaluation.py](../../src/mini_agentx/agents/evaluation.py) 和 [client.py](../../src/mini_agentx/llm/client.py)。下面按 evaluate_experiment 的执行顺序读代码；每看完一段，回到源码找到它的输入、异常和下游使用位置。
+
 ## 论文对应
 
 对照 [AgentX §6 与附录 C.3](https://arxiv.org/html/2606.26859v2#S6)：让 LLM 将观测证据转成结构化判断、解释和后续建议。环境沿用上一章合成 A/B；本章不是线上收益复现，也还不是完整的工具自主调用 agent。
@@ -75,6 +77,15 @@ LLM 判决与规则参照一致时得到对应 final 判决；分歧标记 REVIE
 
 入口 `agents/evaluation.py:evaluate_experiment(run, client)` 读取 report.json，要求 simulated=true，再计算 events.csv 的 SHA256 与报告摘要核对。不匹配就停止，尚未调用模型；这是防止统计报告与事件文件被混用的工程检查，不是对整个实验可信度的全面证明。
 
+
+```python
+digest = hashlib.sha256((run / "events.csv").read_bytes()).hexdigest()
+if digest != report["events_sha256"]:
+    raise ValueError("事件摘要不匹配，拒绝评估")
+```
+
+请注意：这段检查发生在创建 messages 之前，因此事件摘要不匹配时不会消耗 API。
+
 随后 `abtest/simulator.py:evaluation_evidence` 从报告挑选观测、政策和模拟标识，去掉 rule_decision。simulator_private.json 不读取。这使 LLM 可以根据事实做判断，而不是抄程序的结论。
 
 学习检查：打开 evaluations 下的 evidence.json 与原 report.json，比较哪些字段进入模型，确认没有规则答案与私有场景参数。
@@ -107,15 +118,52 @@ candidate, metadata = client.complete(messages)
 
 `validate_output` 强制引用覆盖效果、区间、护栏、样本量和流量平衡五类证据。它检查必需字段和内容，并非全字段的严格拒绝未知键 schema。JSON 能解析只完成第一层，引用能核对完成第二层，解释的逻辑是否成立仍需审阅。
 
+**动手检查引用校验：** 下面只调用已有纯 Python 函数，不需要实验或 API。
+
+```bash
+python - <<'PYCODE'
+from mini_agentx.agents.evaluation import resolve_path, values_match
+evidence = {"analysis": {"checks": {"guardrails_pass": True}}}
+print(resolve_path(evidence, "analysis.checks.guardrails_pass"))
+print("布尔不能冒充数字：", values_match(True, 1))
+try:
+    resolve_path(evidence, "analysis.primary.missing")
+except ValueError as error:
+    print("预期拒绝：", error)
+PYCODE
+```
+
+先预测输出，再运行。接着看 values_match 的列表递归分支，解释置信区间的两个端点如何被检查。
+
 ### 第四步：把错误反馈给模型，有限修复
 
 若 schema 或引用校验失败，程序保存原响应和错误，再追加两条消息：assistant 的错误响应，以及 user 的明确校验错误。下一次 complete 能根据同一原始证据修复输出。
+
+
+```python
+except ValueError as error:
+    record.update(status="invalid_output", error=str(error))
+    attempts.append(record)
+    messages.append({"role": "assistant", "content": json.dumps(candidate, ensure_ascii=False)})
+    messages.append({"role": "user", "content": f"校验失败：{error}。请依据原始证据重新输出完整 JSON。"})
+    continue
+```
+
+这里的 continue 回到尝试循环。与 Brainstorm 相比，这次反馈的是判断校验错误，没有工具执行结果。
 
 最多两次尝试包括 API 失败和无效输出。不可恢复 HTTP 4xx 直接停止，429 和网络故障可在剩余次数内重试。最终没有合法响应时保存 trace 并抛出失败，不生成 assessment.json，也不把规则答案伪装成 LLM 结论。
 
 ### 第五步：校验通过后比较规则参照
 
 程序现在才读取 `report.analysis.rule_decision`，与 LLM verdict 比较：相同则 final 保留该 verdict；不同则 final=REVIEW_REQUIRED。这是模型解释与固定政策之间的分歧检查，不是人工审核通过，也不是自动生产部署。KEEP 等状态只是本地判断产物，当前不会修改真实流量或执行回滚。
+
+
+```python
+rule = report["analysis"]["rule_decision"]
+matched = output["verdict"] == rule["verdict"]
+```
+
+试着在阅读现有判决分歧测试时追踪 matched=False，确认程序不会直接采用模型的 KEEP。
 
 ### 第六步：把判断保存成下游资产
 
