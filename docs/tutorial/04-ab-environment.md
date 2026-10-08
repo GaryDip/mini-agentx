@@ -1,5 +1,8 @@
 # 模拟 A/B：为 Evaluation Agent 建立环境
 
+本章实现的 ab-run 全程由 Python 执行，没有 LLM prompt。要学习模型每一次请求、A/B 证据如何进入 prompt 与错误修复，请先读 [Evaluation 教程的提示词与每次请求](05-evaluation-agent.md#先学-ab-的提示词与每次请求)。
+
+
 ## 论文对应与边界
 
 对照 [AgentX §6.2–6.4](https://arxiv.org/html/2606.26859v2#S6)：保留流量分配、反馈统计、护栏与结构化结论的流程。首版采用固定窗口、合成点击和工程阈值，不实现生产发布、真实用户反馈、CUPED、业务复合收益或人工例外审查。
