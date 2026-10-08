@@ -10,7 +10,25 @@
 
 阅读 [教程路线图 PLAN.md](PLAN.md)，每章包含目标、实现步骤、方法和验收条件。
 
-**当前仅完成路线图和仓库文档，训练与 agent 代码尚未实现。** 计划里的命令是目标接口，目前不能运行。每章完成后将补充真实安装和运行步骤，并保存对应 Git 提交。
+当前已完成 Python 包结构和命令入口，训练与 agent 尚未实现。教程中的后续命令仍是目标接口。
+
+## 安装与运行
+
+在项目根目录执行：
+
+```bash
+conda create -n mini-agentx python=3.12 pip -y
+conda activate mini-agentx
+python -m pip install -e .
+mini-agentx --help
+mini-agentx --version
+```
+
+如果已经创建环境，只需激活环境，无需重复创建。
+
+## 教程进度
+
+1. [Python 工程与命令入口](docs/tutorial/01-project.md)
 
 ## 复现范围
 
