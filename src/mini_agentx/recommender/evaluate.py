@@ -7,13 +7,17 @@ from pathlib import Path
 import torch
 
 
-def load_data(directory: Path, include_test=False):
+def load_data(directory: Path, include_test=False, include_validation=True):
     manifest = json.loads((directory / "manifest.json").read_text())
     for name, digest in manifest["file_sha256"].items():
         if hashlib.sha256((directory / name).read_bytes()).hexdigest() != digest:
             raise ValueError(f"数据摘要不匹配：{name}")
     splits = {}
-    names = ("train", "validation", "test") if include_test else ("train", "validation")
+    names = ["train"]
+    if include_validation:
+        names.append("validation")
+    if include_test:
+        names.append("test")
     for name in names:
         with (directory / f"{name}.csv").open() as file:
             splits[name] = [(int(row["user_id"]), int(row["item_id"]))

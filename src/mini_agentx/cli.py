@@ -32,6 +32,16 @@ def main() -> None:
     eval_parser.add_argument("--run", required=True)
     eval_parser.add_argument("--split", choices=("validation", "test"), default="validation")
     eval_parser.add_argument("--config", default="configs/baseline.toml")
+    ab_parser = subparsers.add_parser("ab-run", help="运行固定窗口的模拟 A/B 实验")
+    ab_parser.add_argument("--config", default="configs/baseline.toml")
+    ab_parser.add_argument("--ab-config", default="configs/abtest.toml")
+    ab_parser.add_argument("--scenario", choices=("improvement", "regression", "guardrail", "inconclusive", "null"), default="improvement")
+    ab_parser.add_argument("--model-a", help="A 模型 run ID；模型模式须使用 null 场景")
+    ab_parser.add_argument("--model-b", help="B 模型 run ID")
+    report_parser = subparsers.add_parser("ab-report", help="读取可交给 Evaluation Agent 的模拟实验报告")
+    report_parser.add_argument("--config", default="configs/baseline.toml")
+    report_parser.add_argument("--run", required=True)
+    report_parser.add_argument("--evidence-only", action="store_true", help="移除程序判决，输出 LLM 盲评证据")
     args = parser.parse_args()
     if args.command in ("check-config", "prepare-data"):
         try:
@@ -51,6 +61,27 @@ def main() -> None:
                 result = train(config)
             else:
                 result = evaluate_run(Path(config["paths"]["runs"]) / args.run, args.split)
+        except (OSError, ValueError, KeyError) as error:
+            parser.error(str(error))
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    elif args.command in ("ab-run", "ab-report"):
+        from pathlib import Path
+        from mini_agentx.abtest.simulator import load_ab_config, simulate, evaluation_evidence
+        try:
+            runs = Path(load_config(args.config)["paths"]["runs"])
+            if args.command == "ab-run":
+                report = simulate(load_ab_config(args.ab_config), args.scenario, runs,
+                                  runs / args.model_a if args.model_a else None,
+                                  runs / args.model_b if args.model_b else None)
+                result = {"experiment_id": report["experiment_id"], "simulated": True,
+                          "stage": report["stage"], "primary": report["analysis"]["primary"],
+                          "rule_decision": report["analysis"]["rule_decision"]}
+            else:
+                result = json.loads((runs / args.run / "report.json").read_text())
+                if result.get("simulated") is not True:
+                    raise ValueError("该产物不是模拟 A/B 报告")
+                if args.evidence_only:
+                    result = evaluation_evidence(result)
         except (OSError, ValueError, KeyError) as error:
             parser.error(str(error))
         print(json.dumps(result, ensure_ascii=False, indent=2))

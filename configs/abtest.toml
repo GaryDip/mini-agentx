@@ -1,0 +1,41 @@
+# 反馈为合成数据；阈值在观察实验结果前固定。
+[simulation]
+seed = 42
+users = 2000
+sessions_per_user = 20
+bootstrap_samples = 1000
+canary_fraction = 0.1
+
+[policy]
+min_users_per_arm = 200
+min_absolute_ctr_gain = 0.005
+max_latency_ratio = 1.25
+max_error_rate = 0.02
+srm_p_value = 0.001
+
+[scenarios.improvement]
+ctr_delta = 0.06
+latency_multiplier = 1.0
+error_rate_b = 0.005
+
+[scenarios.regression]
+ctr_delta = -0.06
+latency_multiplier = 1.0
+error_rate_b = 0.005
+
+[scenarios.guardrail]
+ctr_delta = 0.06
+latency_multiplier = 1.6
+error_rate_b = 0.005
+
+[scenarios.inconclusive]
+ctr_delta = 0.0
+latency_multiplier = 1.0
+error_rate_b = 0.005
+users = 100
+sessions_per_user = 2
+
+[scenarios.null]
+ctr_delta = 0.0
+latency_multiplier = 1.0
+error_rate_b = 0.005

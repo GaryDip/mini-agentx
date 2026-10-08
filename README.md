@@ -10,7 +10,7 @@
 
 阅读 [教程路线图 PLAN.md](PLAN.md)，每章包含目标、实现步骤、方法和验收条件。
 
-教程 01 已完成：Python 包结构、命令入口、配置读取和运行目录规范。已实现 BPR-MF 训练和离线评估；agent 与模拟 A/B 尚未实现。
+教程 01 已完成：Python 包结构、命令入口、配置读取和运行目录规范。已实现 BPR-MF 训练和离线评估；模拟 A/B 环境已实现，LLM agent 尚未接入。
 
 ## 安装与运行
 
@@ -33,6 +33,7 @@ mini-agentx check-config --config configs/baseline.toml
 2. [数据环境](docs/tutorial/02-data.md)：下载、检查、固定划分与 ID 映射。
 3. [推荐基线](docs/tutorial/03-baseline.md)：BPR-MF 训练。
 4. [离线评估](docs/tutorial/04-evaluation.md)：指标与评估协议。
+5. [模拟 A/B 环境](docs/tutorial/04-ab-environment.md)：稳定分桶、合成反馈、用户级统计与护栏。
 
 ## 复现范围
 
