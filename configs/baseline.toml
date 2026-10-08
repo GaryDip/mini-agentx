@@ -4,3 +4,6 @@ seed = 42
 raw_data = "data/raw"
 processed_data = "data/processed"
 runs = "runs"
+
+[data]
+positive_rating = 4

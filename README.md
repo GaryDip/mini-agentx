@@ -30,6 +30,7 @@ mini-agentx check-config --config configs/baseline.toml
 ## 教程进度
 
 1. [Python 工程与命令入口](docs/tutorial/01-project.md)
+2. [数据环境](docs/tutorial/02-data.md)：已完成下载、检查、固定划分与 ID 映射。
 
 ## 复现范围
 

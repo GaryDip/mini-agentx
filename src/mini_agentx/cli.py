@@ -2,6 +2,7 @@ import argparse
 import json
 
 from mini_agentx.config import load_config
+from mini_agentx.data.prepare import prepare_data
 
 
 def main() -> None:
@@ -21,10 +22,16 @@ def main() -> None:
         "--config", default="configs/baseline.toml",
         help="配置文件路径，默认 configs/baseline.toml",
     )
+    prepare_parser = subparsers.add_parser(
+        "prepare-data", help="转换正反馈并保存固定数据划分"
+    )
+    prepare_parser.add_argument("--config", default="configs/baseline.toml")
     args = parser.parse_args()
-    if args.command == "check-config":
+    if args.command in ("check-config", "prepare-data"):
         try:
             config = load_config(args.config)
+            if args.command == "prepare-data":
+                config = prepare_data(config)
         except (OSError, ValueError) as error:
             parser.error(str(error))
         print(json.dumps(config, ensure_ascii=False, indent=2))
