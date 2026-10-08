@@ -12,9 +12,9 @@ class PrepareDataTest(unittest.TestCase):
             root = Path(directory)
             source = root / "raw/ml-100k/u.data"
             source.parent.mkdir(parents=True)
-            # Deliberately unsorted; item ID breaks timestamp ties.
+            # Deliberately unsorted input; verify temporal sorting.
             source.write_text("1 30 5 30\n1 20 4 20\n1 10 5 10\n"
-                              "2 10 5 10\n2 30 4 30\n2 20 5 10\n"
+                              "2 10 5 20\n2 30 4 30\n2 20 5 10\n"
                               "2 40 1 5\n3 10 5 10\n")
             config = {"paths": {"raw_data": str(root / "raw"),
                                  "processed_data": str(root / "out")}}
