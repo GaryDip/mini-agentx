@@ -4,3 +4,7 @@ model = "deepseek-flash"
 timeout_seconds = 45
 max_tokens = 4500
 max_attempts = 2
+
+[workflow]
+max_model_calls = 8
+max_tool_calls = 6

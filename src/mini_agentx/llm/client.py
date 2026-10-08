@@ -16,7 +16,9 @@ class LLMError(ValueError):
 class DeepSeekClient:
     def __init__(self, config_path="configs/llm.toml"):
         with Path(config_path).open("rb") as file:
-            self.config = tomllib.load(file)["llm"]
+            document = tomllib.load(file)
+            self.config = document["llm"]
+            self.workflow = document.get("workflow", {})
         if self.config["base_url"] != "https://api.deepseek.com":
             raise ValueError("本教程仅支持官方 DeepSeek endpoint")
         for name in ("max_tokens", "max_attempts", "timeout_seconds"):

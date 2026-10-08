@@ -10,7 +10,7 @@
 
 阅读 [教程路线图 PLAN.md](PLAN.md)，每章包含目标、实现步骤、方法和验收条件。
 
-教程 01 已完成：Python 包结构、命令入口、配置读取和运行目录规范。已实现 BPR-MF 训练和离线评估；模拟 A/B 已接入 DeepSeek Evaluation Agent；Brainstorm 已接入 DeepSeek 生成与校验；Developing 和完整闭环尚未实现。
+教程 01 已完成：Python 包结构、命令入口、配置读取和运行目录规范。已实现 BPR-MF 训练和离线评估；模拟 A/B 已接入 DeepSeek Evaluation Agent；Brainstorm 已接入 DeepSeek 只读调查、生成与校验；Developing 和完整闭环尚未实现。
 
 ## 安装与运行
 
@@ -35,7 +35,7 @@ mini-agentx check-config --config configs/baseline.toml
 4. [离线评估](docs/tutorial/04-evaluation.md)：指标与评估协议。
 5. [模拟 A/B 环境](docs/tutorial/04-ab-environment.md)：稳定分桶、合成反馈、用户级统计与护栏。
 6. [DeepSeek Evaluation Agent](docs/tutorial/05-evaluation-agent.md)：盲评证据、结构化判断与程序校验。
-7. [Brainstorm 契约](docs/tutorial/06-brainstorm-contracts.md) 与 [生成流程](docs/tutorial/06-brainstorm-agent.md)：真实基线证据、DeepSeek 候选生成、校验修复与交接。
+7. [Brainstorm 契约](docs/tutorial/06-brainstorm-contracts.md)、[生成流程](docs/tutorial/06-brainstorm-agent.md) 与 [主动调查工具](docs/tutorial/06-brainstorm-tools.md)。
 
 ## 复现范围
 

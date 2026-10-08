@@ -12,7 +12,9 @@ mini-agentx brainstorm --baseline-run <baseline_run_id>
 
 本机可使用 `baseline-c30ead6da742`。命令从基线生成新的 context，然后调用 DeepSeek。也可传 `--context <context.json>` 使用已准备上下文；两种输入互斥。
 
-默认使用 `configs/brainstorm-task.json` 与 `configs/brainstorm-llm.toml`，可用 `--task`、`--llm-config` 覆盖。密钥仍由 .env 读取；每批最多两次调用，每次输出最多 4,500 token。这里不修改模型、不训练、不启动 A/B。
+默认使用 `configs/brainstorm-task.json` 与 `configs/brainstorm-llm.toml`，可用 `--task`、`--llm-config` 覆盖。密钥仍由 .env 读取；现在启用只读调查工具，每批最多 8 次模型调用、6 次工具调用，每次输出最多 4,500 token；无效输出最多两次。这里不修改模型、不训练、不启动 A/B。
+
+工具协议、范围与最新真实轨迹见 [主动调查工具](06-brainstorm-tools.md)。
 
 ## 调用链
 
@@ -35,6 +37,7 @@ prompt 在 `agents/brainstorm.py`，包含角色、事实与假设的区分、�
 
 - context.json：实际输入，不含测试指标或私有模拟参数。
 - trace.json：system prompt、每次响应、校验错误、模型、usage 和延迟；修复请求可由错误及响应重建。
+- tools.json：主动工具请求、结果与错误，context.json 包含查询后追加的证据。
 - proposals.json：通过契约的整个候选批次。
 - handoff.json：筛选结果、父实验和数据版本。
 - proposal.json：仅有 ready 时保存，携带任务、父实验、数据版本和选中提案。

@@ -132,13 +132,16 @@ def main() -> None:
         from pathlib import Path
         from mini_agentx.agents.brainstorm_context import build_context
         from mini_agentx.agents.brainstorm import generate_proposals
+        from mini_agentx.tools.brainstorm import BrainstormTools
         from mini_agentx.llm.client import DeepSeekClient
         try:
             runs = Path(load_config(args.config)["paths"]["runs"])
             context_path = args.context
             if args.baseline_run:
                 context_path = build_context(runs / args.baseline_run, args.task, runs)["context_path"]
-            result = generate_proposals(context_path, runs, DeepSeekClient(args.llm_config))
+            context = json.loads(Path(context_path).read_text())
+            tools = BrainstormTools(Path.cwd(), runs, context)
+            result = generate_proposals(context_path, runs, DeepSeekClient(args.llm_config), tools=tools)
         except (OSError, ValueError, KeyError) as error:
             parser.error(str(error))
         print(json.dumps(result, ensure_ascii=False, indent=2))
