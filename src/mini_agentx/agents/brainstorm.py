@@ -6,6 +6,7 @@ import uuid
 
 from mini_agentx.llm.client import LLMError
 from .brainstorm_contracts import validate_batch, validate_context
+from .activity_log import ActivityLog
 
 
 SYSTEM_PROMPT = """你是推荐系统研发的 Brainstorm Agent。
@@ -49,13 +50,16 @@ def generate_proposals(context_path, runs, client, tools=None):
     validate_context(context)
     destination = Path(runs) / ("brainstorm-" + uuid.uuid4().hex[:12])
     destination.mkdir(parents=True)
+    activity = ActivityLog(destination)
+    activity.record("开始任务", result={"parent_run_id": context["parent_run_id"], "task": context["task"]})
     (destination / "context.json").write_text(json.dumps(context, ensure_ascii=False, indent=2) + "\n")
     tool_prompt = ""
     if tools is not None:
         tool_prompt = """\n现在使用 JSON 工具协议自主调查（不是原生 function calling）。
 每轮仅输出一种 action：
-{"action":"tool","name":"工具名","arguments":{...}}
-或者 {"action":"propose","batch":上述完整提案批次}。
+{"action":"tool","name":"工具名","arguments":{...},"reason":"简要说明调查目的"}
+或者 {"action":"propose","batch":上述完整提案批次,"reason":"简要说明如何依据观测选择方案"}。
+reason 用一到两句公开行动说明，记录目标与依据，不输出内部思维链或长篇推演。
 先 read_file 查看 src/mini_agentx/recommender/model.py，read_experiment 查看 parent_run_id，
 再 training_data_summary 查询训练统计；这些成功后才允许 propose。
 可以按需要查看训练器、配置、历史实验。工具返回带 evidence_id 的真实证据，后续提案可引用。
@@ -76,10 +80,12 @@ def generate_proposals(context_path, runs, client, tools=None):
     invalid_outputs = 0
     batch = handoff = None
     for index in range(max_calls):
+        activity.record(f"调用模型：第 {index + 1} 次")
         try:
             candidate, metadata = client.complete(messages)
         except LLMError as error:
             attempts.append({"attempt": index + 1, "status": "api_failed", "error": str(error)})
+            activity.record("模型调用失败", result={"error": str(error)})
             if "HTTP 4" in str(error) and "HTTP 429" not in str(error):
                 break
             continue
@@ -88,12 +94,17 @@ def generate_proposals(context_path, runs, client, tools=None):
             if tools is not None:
                 if not isinstance(candidate, dict):
                     raise ValueError("必须返回 JSON action 对象")
+                if "reason" in candidate and (not isinstance(candidate["reason"], str) or not candidate["reason"].strip() or len(candidate["reason"]) > 1000):
+                    raise ValueError("reason 必须是最多1000字符的简要公开说明")
                 if candidate.get("action") == "tool":
-                    if set(candidate) != {"action", "name", "arguments"}:
-                        raise ValueError("工具 action 只能包含 action/name/arguments")
+                    if not {"action", "name", "arguments"} <= set(candidate) or not set(candidate) <= {"action", "name", "arguments", "reason"}:
+                        raise ValueError("工具 action 只能包含 action/name/arguments/reason")
                     if len(tool_history) >= max_tools:
                         raise ValueError("工具预算已耗尽，不能继续调用工具")
                     entry = {"name": candidate["name"], "arguments": candidate["arguments"]}
+                    entry["reason"] = candidate.get("reason")
+                    activity.record(f"请求工具：{candidate['name']}", reason=candidate.get("reason"),
+                                    result={"arguments": candidate["arguments"], **metadata})
                     try:
                         source, facts = tools.execute(candidate["name"], candidate["arguments"])
                         evidence = {"evidence_id": f"tool-{len(tool_history) + 1}",
@@ -112,6 +123,7 @@ def generate_proposals(context_path, runs, client, tools=None):
                         entry.update(status="rejected", error=str(error))
                         observation = {"tool_error": str(error)}
                     tool_history.append(entry)
+                    activity.record(f"工具结果：{candidate['name']}", result=entry.get("evidence", {"error": entry.get("error")}))
                     record["status"] = "tool_action"
                     attempts.append(record)
                     messages.extend([
@@ -119,8 +131,9 @@ def generate_proposals(context_path, runs, client, tools=None):
                         {"role": "user", "content": json.dumps(observation, ensure_ascii=False)},
                     ])
                     continue
-                if set(candidate) != {"action", "batch"} or candidate.get("action") != "propose":
+                if not {"action", "batch"} <= set(candidate) or not set(candidate) <= {"action", "batch", "reason"} or candidate.get("action") != "propose":
                     raise ValueError("提案 action 必须为 propose 并包含 batch")
+                activity.record("模型提交候选批次", reason=candidate.get("reason"), result=candidate["batch"])
                 if inspected != {"model", "parent", "training"}:
                     raise ValueError("生成前必须成功调查模型文件、父实验及训练统计")
                 candidate = candidate["batch"]
@@ -132,6 +145,7 @@ def generate_proposals(context_path, runs, client, tools=None):
                     raise ValueError("选中提案必须引用至少一条本轮工具调查获得的证据")
         except ValueError as error:
             record.update(status="invalid_output", error=str(error))
+            activity.record("程序校验失败", result={"error": str(error), "response": record["response"]})
             attempts.append(record)
             invalid_outputs += 1
             if invalid_outputs >= client.config["max_attempts"]:
@@ -150,6 +164,7 @@ def generate_proposals(context_path, runs, client, tools=None):
     (destination / "tools.json").write_text(json.dumps(tool_history, ensure_ascii=False, indent=2) + "\n")
     (destination / "trace.json").write_text(json.dumps({"system_prompt": system_prompt, "attempts": attempts}, ensure_ascii=False, indent=2) + "\n")
     if batch is None:
+        activity.record("任务失败", result={"model_calls": len(attempts), "tool_calls": len(tool_history)})
         (destination / "status.json").write_text(json.dumps({"status": "failed", "attempts": len(attempts)}) + "\n")
         raise ValueError(f"Brainstorm 生成失败；诊断见 {destination}/trace.json")
     for name, value in (("proposals.json", batch), ("handoff.json", handoff)):
@@ -160,9 +175,11 @@ def generate_proposals(context_path, runs, client, tools=None):
                     "proposal": handoff["selected_proposal"]}
         (destination / "proposal.json").write_text(json.dumps(envelope, ensure_ascii=False, indent=2) + "\n")
     (destination / "status.json").write_text(json.dumps({"status": handoff["handoff_status"], "attempts": len(attempts)}) + "\n")
+    activity.record("校验通过并完成交接", result=handoff)
     return {"run_id": destination.name, "directory": str(destination),
             "handoff_status": handoff["handoff_status"], "attempts": len(attempts),
             "tool_calls": len(tool_history),
+            "activity_log": str(destination / "activity.md"),
             "candidates": [{"proposal_id": item["proposal_id"], "title": item["title"],
                             "maturity": item["maturity"], "priority": item["priority"]}
                            for item in batch["proposals"]],

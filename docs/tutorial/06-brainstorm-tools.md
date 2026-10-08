@@ -58,6 +58,17 @@ read_experiment 用固定字段筛选训练报告，不返回测试指标、完�
 
 ## 如何查看实际工具轨迹
 
+新运行优先打开 `runs/brainstorm-<id>/activity.md`，一个文件按时间顺序展示：开始任务 → 调用模型 → 工具请求及公开行动理由 → 工具结果 → 候选批次 → 程序校验及交接。运行中每个事件立即写入，可在编辑器里查看进展。时间使用 Asia/Singapore（UTC+08）。
+
+公开行动理由由模型以 `reason` 字段提供，是简短的目的与依据说明，不是内部思维链，也不能当作优化已有效的证明。缺失说明时不补造。失败、拒绝与修复同样记录。`activity.jsonl` 保存对应的逐行事件，便于以后制作可视化。
+
+```bash
+mini-agentx brainstorm --baseline-run baseline-c30ead6da742
+# 根据命令输出的 activity_log 路径打开 activity.md
+```
+
+例如真实运行 `brainstorm-463feb9fa5af` 使用 5 次模型调用、4 次工具调用，依次读取模型、父实验、训练统计和实验列表，然后生成三个候选。统一日志保留每次公开说明及实际结果；候选仍需下游训练验证。旧运行没有统一日志，需要重新运行才能记录新的行动说明。
+
 `runs/brainstorm-<id>/tools.json` 记录工具名、参数、成功证据或拒绝原因。
 context.json 保存扩充后的证据，trace.json 保存模型请求及提示词。引用由校验器与扩充后的证据核对；工具错误不会进入 evidence。
 

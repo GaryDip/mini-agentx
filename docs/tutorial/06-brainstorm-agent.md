@@ -33,6 +33,7 @@ prompt 在 `agents/brainstorm.py`，包含角色、事实与假设的区分、�
 
 ## 产物
 
+- activity.md：统一的时间顺序日志，展示动作、公开行动理由、工具结果、校验与交接；activity.jsonl 是对应的结构化事件。
 `runs/brainstorm-<id>/`：
 
 - context.json：实际输入，不含测试指标或私有模拟参数。

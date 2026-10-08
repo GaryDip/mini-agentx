@@ -29,7 +29,7 @@ class ToolLoopTest(unittest.TestCase):
         batch["proposals"][0]["evidence_refs"].append({
             "evidence_id": "tool-3", "field": "users", "value": 2})
         client = FakeClient([
-            {"action": "tool", "name": "read_file", "arguments": {"path": "src/mini_agentx/recommender/model.py"}},
+            {"action": "tool", "name": "read_file", "arguments": {"path": "src/mini_agentx/recommender/model.py"}, "reason": "确认模型接口与表示结构"},
             {"action": "tool", "name": "read_experiment", "arguments": {"run_id": parent}},
             {"action": "tool", "name": "training_data_summary", "arguments": {}},
             {"action": "propose", "batch": batch},
@@ -40,6 +40,10 @@ class ToolLoopTest(unittest.TestCase):
             self.assertEqual(result["tool_calls"], 3)
             saved = json.loads((Path(result["directory"]) / "context.json").read_text())
             self.assertEqual(saved["evidence"][-1]["evidence_id"], "tool-3")
+            activity = (Path(result["directory"]) / "activity.md").read_text()
+            self.assertIn("确认模型接口与表示结构", activity)
+            self.assertLess(activity.index("请求工具：read_file"), activity.index("工具结果：read_file"))
+            self.assertIn("校验通过并完成交接", activity)
 
     def test_propose_without_investigation_fails(self):
         example = Path(__file__).resolve().parents[1] / "examples/brainstorm"
