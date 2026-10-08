@@ -271,7 +271,8 @@ MovieLens 100K、BPR 矩阵分解、NDCG/Recall、DeepSeek、SQLite、CLI、Git 
 - [ ] 04：离线评估已实现；产物契约及晋升规则待候选实验接入。
 - [x] 模拟 A/B 环境：稳定分桶、合成反馈、用户级统计、护栏、模型适配与证据报告。
 - [x] 模拟 A/B 的 LLM 评估：DeepSeek 分析证据，校验证据引用与判决，分歧转复查。
-- [ ] 05–08：API、三个 agent 与单轮闭环。
+- [x] 06 部分：Brainstorm 的任务/提案契约、证据上下文与交接校验。
+- [ ] 05–08 剩余：Brainstorm 生成、Developing 工具、三个 agent 单轮闭环。
 - [ ] 09–10：记忆、多轮、预算与恢复。
 - [ ] 11：完整演示与实验复核。
 - [ ] 12：简化 SGPO。

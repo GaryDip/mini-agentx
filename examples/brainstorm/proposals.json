@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "task_id": "movielens-ranking-improvement",
+  "parent_run_id": "synthetic-example-parent",
+  "proposals": [
+    {
+      "proposal_id": "example-p1",
+      "title": "物品偏置",
+      "mechanism_key": "item_bias",
+      "maturity": "ready",
+      "priority": 1,
+      "hypothesis": "加入物品偏置可能改善对电影整体受欢迎程度的建模，需要实验验证",
+      "evidence_refs": [
+        {
+          "evidence_id": "example-system",
+          "field": "features",
+          "value": "user and item IDs only"
+        }
+      ],
+      "changes": [
+        {
+          "file": "model.py",
+          "description": "加入可训练物品偏置，保持现有打分接口"
+        }
+      ],
+      "validation": {
+        "metric": "ndcg@10",
+        "expected_direction": "increase",
+        "comparison": "same_data_and_seed_against_parent",
+        "observables": [
+          "正负样本分数差",
+          "验证 NDCG@10"
+        ],
+        "falsification": "如指标未改善或所假设机制未出现，则不支持假设"
+      },
+      "risks": [
+        "假设未验证，可能过拟合或无改善"
+      ],
+      "probes": []
+    },
+    {
+      "proposal_id": "example-p2",
+      "title": "负采样诊断",
+      "mechanism_key": "negative_sampling_diagnosis",
+      "maturity": "probe_first",
+      "priority": 2,
+      "hypothesis": "采样分布可能影响学习，但尚无梯度或采样统计证据",
+      "evidence_refs": [
+        {
+          "evidence_id": "example-system",
+          "field": "features",
+          "value": "user and item IDs only"
+        }
+      ],
+      "changes": [
+        {
+          "file": "training.toml",
+          "description": "调查后再决定是否调整采样参数"
+        }
+      ],
+      "validation": {
+        "metric": "ndcg@10",
+        "expected_direction": "increase",
+        "comparison": "same_data_and_seed_against_parent",
+        "observables": [
+          "正负样本分数差",
+          "验证 NDCG@10"
+        ],
+        "falsification": "如指标未改善或所假设机制未出现，则不支持假设"
+      },
+      "risks": [
+        "假设未验证，可能过拟合或无改善"
+      ],
+      "probes": [
+        "先记录负样本分布及正负分数差"
+      ]
+    },
+    {
+      "proposal_id": "example-p3",
+      "title": "内容特征",
+      "mechanism_key": "content_features",
+      "maturity": "backlog",
+      "priority": 3,
+      "hypothesis": "内容特征可能改善泛化，但当前接口仅提供 ID",
+      "evidence_refs": [
+        {
+          "evidence_id": "example-system",
+          "field": "features",
+          "value": "user and item IDs only"
+        }
+      ],
+      "changes": [],
+      "validation": {
+        "metric": "ndcg@10",
+        "expected_direction": "increase",
+        "comparison": "same_data_and_seed_against_parent",
+        "observables": [
+          "正负样本分数差",
+          "验证 NDCG@10"
+        ],
+        "falsification": "如指标未改善或所假设机制未出现，则不支持假设"
+      },
+      "risks": [
+        "假设未验证，可能过拟合或无改善"
+      ],
+      "probes": [
+        "先确认特征来源与可用接口"
+      ]
+    }
+  ]
+}

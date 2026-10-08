@@ -35,6 +35,7 @@ mini-agentx check-config --config configs/baseline.toml
 4. [离线评估](docs/tutorial/04-evaluation.md)：指标与评估协议。
 5. [模拟 A/B 环境](docs/tutorial/04-ab-environment.md)：稳定分桶、合成反馈、用户级统计与护栏。
 6. [DeepSeek Evaluation Agent](docs/tutorial/05-evaluation-agent.md)：盲评证据、结构化判断与程序校验。
+7. [Brainstorm 契约](docs/tutorial/06-brainstorm-contracts.md)：任务边界、真实基线上下文与候选校验；尚未接入生成调用。
 
 ## 复现范围
 

@@ -46,6 +46,13 @@ def main() -> None:
     agent_parser.add_argument("--run", required=True)
     agent_parser.add_argument("--config", default="configs/baseline.toml")
     agent_parser.add_argument("--llm-config", default="configs/llm.toml")
+    context_parser = subparsers.add_parser("brainstorm-context", help="从真实基线构造 Brainstorm 输入，不调用 LLM")
+    context_parser.add_argument("--baseline-run", required=True)
+    context_parser.add_argument("--task", default="configs/brainstorm-task.json")
+    context_parser.add_argument("--config", default="configs/baseline.toml")
+    proposals_parser = subparsers.add_parser("check-proposals", help="校验候选提案及交接，不执行实验")
+    proposals_parser.add_argument("--context", required=True)
+    proposals_parser.add_argument("--proposals", required=True)
     args = parser.parse_args()
     if args.command in ("check-config", "prepare-data"):
         try:
@@ -96,6 +103,21 @@ def main() -> None:
         try:
             runs = Path(load_config(args.config)["paths"]["runs"])
             result = evaluate_experiment(runs / args.run, DeepSeekClient(args.llm_config))
+        except (OSError, ValueError, KeyError) as error:
+            parser.error(str(error))
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    elif args.command in ("brainstorm-context", "check-proposals"):
+        from pathlib import Path
+        from mini_agentx.agents.brainstorm_context import build_context
+        from mini_agentx.agents.brainstorm_contracts import validate_batch
+        try:
+            if args.command == "brainstorm-context":
+                runs = Path(load_config(args.config)["paths"]["runs"])
+                result = build_context(runs / args.baseline_run, args.task, runs)
+            else:
+                context = json.loads(Path(args.context).read_text())
+                batch = json.loads(Path(args.proposals).read_text())
+                result = validate_batch(batch, context)
         except (OSError, ValueError, KeyError) as error:
             parser.error(str(error))
         print(json.dumps(result, ensure_ascii=False, indent=2))
