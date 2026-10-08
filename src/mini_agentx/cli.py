@@ -42,6 +42,10 @@ def main() -> None:
     report_parser.add_argument("--config", default="configs/baseline.toml")
     report_parser.add_argument("--run", required=True)
     report_parser.add_argument("--evidence-only", action="store_true", help="移除程序判决，输出 LLM 盲评证据")
+    agent_parser = subparsers.add_parser("ab-evaluate", help="调用 DeepSeek 对模拟 A/B 证据进行盲评")
+    agent_parser.add_argument("--run", required=True)
+    agent_parser.add_argument("--config", default="configs/baseline.toml")
+    agent_parser.add_argument("--llm-config", default="configs/llm.toml")
     args = parser.parse_args()
     if args.command in ("check-config", "prepare-data"):
         try:
@@ -82,6 +86,16 @@ def main() -> None:
                     raise ValueError("该产物不是模拟 A/B 报告")
                 if args.evidence_only:
                     result = evaluation_evidence(result)
+        except (OSError, ValueError, KeyError) as error:
+            parser.error(str(error))
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    elif args.command == "ab-evaluate":
+        from pathlib import Path
+        from mini_agentx.llm.client import DeepSeekClient
+        from mini_agentx.agents.evaluation import evaluate_experiment
+        try:
+            runs = Path(load_config(args.config)["paths"]["runs"])
+            result = evaluate_experiment(runs / args.run, DeepSeekClient(args.llm_config))
         except (OSError, ValueError, KeyError) as error:
             parser.error(str(error))
         print(json.dumps(result, ensure_ascii=False, indent=2))

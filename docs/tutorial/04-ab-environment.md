@@ -4,7 +4,7 @@
 
 对照 [AgentX §6.2–6.4](https://arxiv.org/html/2606.26859v2#S6)：保留流量分配、反馈统计、护栏与结构化结论的流程。首版采用固定窗口、合成点击和工程阈值，不实现生产发布、真实用户反馈、CUPED、业务复合收益或人工例外审查。
 
-**本章是环境实现，没有调用 LLM。** 下一步 Evaluation Agent 将读取观测证据、解释结果、提出 KEEP/EXTEND/DISCARD，然后程序校验。当前 rule_decision 是可检查的规则参照，不应直接当作 LLM 已完成评估。
+**本章是环境实现，不调用 LLM。** LLM 接入已在 [下一章](05-evaluation-agent.md) 实现：读取观测证据、解释结果、提出 KEEP/EXTEND/DISCARD，再由程序校验。本章的 rule_decision 是规则参照。
 
 ## 数据流
 
@@ -106,4 +106,4 @@ mini-agentx ab-report --run <experiment_id> --evidence-only
 | 统计提取 | §6.3；简化 | statistics.py | 事件 → CI/护栏 | bootstrap 替代生产统计工具 |
 | 规则参照 | §6.3；简化 | analyze | 统计 → 三类结论 | 无复合护栏与例外审查 |
 | 证据保存 | §6.4；简化 | report.json | 结论 → 文件 | 尚未接 SQLite 记忆 |
-| LLM 分析 | §6、附录 C.3；后续 | 尚未实现 | 证据 → agent 判断 | 下一阶段接 DeepSeek |
+| LLM 分析 | §6、附录 C.3；简化 | 下一章 agents/evaluation.py | 证据 → agent 判断 | DeepSeek 单轮评估 |
