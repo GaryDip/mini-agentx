@@ -7,7 +7,7 @@ name = "mini-agentx"
 version = "0.1.0"
 description = "A tutorial implementation of the AgentX recommendation optimization workflow"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = ["torch>=2.6,<3", "numpy>=2,<3"]
 
 [project.scripts]
 mini-agentx = "mini_agentx.cli:main"

@@ -26,6 +26,12 @@ def main() -> None:
         "prepare-data", help="转换正反馈并保存固定数据划分"
     )
     prepare_parser.add_argument("--config", default="configs/baseline.toml")
+    train_parser = subparsers.add_parser("train", help="训练 BPR-MF 基线")
+    train_parser.add_argument("--config", default="configs/baseline.toml")
+    eval_parser = subparsers.add_parser("evaluate", help="评估已保存的模型")
+    eval_parser.add_argument("--run", required=True)
+    eval_parser.add_argument("--split", choices=("validation", "test"), default="validation")
+    eval_parser.add_argument("--config", default="configs/baseline.toml")
     args = parser.parse_args()
     if args.command in ("check-config", "prepare-data"):
         try:
@@ -35,6 +41,19 @@ def main() -> None:
         except (OSError, ValueError) as error:
             parser.error(str(error))
         print(json.dumps(config, ensure_ascii=False, indent=2))
+    elif args.command in ("train", "evaluate"):
+        from pathlib import Path
+        from mini_agentx.recommender.train import train
+        from mini_agentx.recommender.evaluate import evaluate_run
+        try:
+            config = load_config(args.config)
+            if args.command == "train":
+                result = train(config)
+            else:
+                result = evaluate_run(Path(config["paths"]["runs"]) / args.run, args.split)
+        except (OSError, ValueError, KeyError) as error:
+            parser.error(str(error))
+        print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
         parser.print_help()
 

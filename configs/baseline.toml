@@ -7,3 +7,11 @@ runs = "runs"
 
 [data]
 positive_rating = 4
+
+[training]
+dimensions = 32
+learning_rate = 0.001
+batch_size = 1024
+epochs = 20
+l2 = 0.0001
+threads = 1
