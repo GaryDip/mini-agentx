@@ -1,4 +1,4 @@
-# 05：DeepSeek Evaluation Agent
+# 05：Evaluation Agent——从实验证据到可核查判断
 
 ## 论文对应
 
@@ -67,17 +67,74 @@ LLM 判决与规则参照一致时得到对应 final 判决；分歧标记 REVIE
 | 规则与分歧 | §6.3；简化 | final | 两类判决 → 有效/需复查 | 无复杂业务护栏和人工例外路径 |
 | 轨迹保存 | §3、§6.4；简化 | evaluations/ | 尝试 → 文件 | 尚未写入 SQLite 记忆 |
 
-## 离线检查
+## 按代码一步一步实现
+
+本章依赖 [模拟 A/B 环境](04-ab-environment.md)。环境负责产生事件、统计与规则参照，本章负责让 LLM 分析证据并保存经过校验的结论。环境与 agent 各有一个教程入口，避免把统计计算和模型判断混在一起。
+
+### 第一步：固定证据来源与完整性
+
+入口 `agents/evaluation.py:evaluate_experiment(run, client)` 读取 report.json，要求 simulated=true，再计算 events.csv 的 SHA256 与报告摘要核对。不匹配就停止，尚未调用模型；这是防止统计报告与事件文件被混用的工程检查，不是对整个实验可信度的全面证明。
+
+随后 `abtest/simulator.py:evaluation_evidence` 从报告挑选观测、政策和模拟标识，去掉 rule_decision。simulator_private.json 不读取。这使 LLM 可以根据事实做判断，而不是抄程序的结论。
+
+学习检查：打开 evaluations 下的 evidence.json 与原 report.json，比较哪些字段进入模型，确认没有规则答案与私有场景参数。
+
+### 第二步：构造 messages 与调用客户端
+
+```python
+messages = [
+    {"role": "system", "content": SYSTEM_PROMPT},
+    {"role": "user", "content": json.dumps(evidence, ensure_ascii=False)},
+]
+candidate, metadata = client.complete(messages)
+```
+
+上面是实际调用的核心形状。SYSTEM_PROMPT 在 evaluation.py，指定角色、规则、模拟限制和输出字段；证据是 user 消息中的数据。`llm/client.py` 发一次 HTTPS 请求并解析 JSON，metadata 返回模型名、usage 和延迟。外层 evaluate_experiment 决定是否再次调用；客户端内部没有额外重试循环。
+
+这里使用固定证据分析流程，**Evaluation 当前没有自主工具调用循环**。LLM 不会自己读取文件或启动 A/B；调用 ab-evaluate 时，由 Python 先读取实验，然后把摘要发送给模型。Brainstorm 的主动调查工具循环见 [06](06-brainstorm.md)。未来可以为 Evaluation 增加读取分组诊断的工具，但现在不能把它描述成已实现。
+
+### 第三步：设计可校验的响应
+
+| 字段 | 下游用途 |
+| --- | --- |
+| simulated | 必须为 true，维持模拟语境 |
+| verdict | KEEP、EXTEND 或 DISCARD |
+| rationale | 非空的中文判断依据 |
+| citations | 点分隔证据路径与对应原始值 |
+| risks、next_steps、caveats | 非空说明列表，记录风险、行动建议和限制 |
+
+与 Brainstorm 引用 facts 的直接字段不同，这里使用嵌套路径，例如 `analysis.primary.ci95`。`resolve_path` 逐层查找字典；`values_match` 检查值、类型与有限数字，数值比较使用很小的浮点容差，列表递归核对。布尔值不会被当作 0/1 数字混用。
+
+`validate_output` 强制引用覆盖效果、区间、护栏、样本量和流量平衡五类证据。它检查必需字段和内容，并非全字段的严格拒绝未知键 schema。JSON 能解析只完成第一层，引用能核对完成第二层，解释的逻辑是否成立仍需审阅。
+
+### 第四步：把错误反馈给模型，有限修复
+
+若 schema 或引用校验失败，程序保存原响应和错误，再追加两条消息：assistant 的错误响应，以及 user 的明确校验错误。下一次 complete 能根据同一原始证据修复输出。
+
+最多两次尝试包括 API 失败和无效输出。不可恢复 HTTP 4xx 直接停止，429 和网络故障可在剩余次数内重试。最终没有合法响应时保存 trace 并抛出失败，不生成 assessment.json，也不把规则答案伪装成 LLM 结论。
+
+### 第五步：校验通过后比较规则参照
+
+程序现在才读取 `report.analysis.rule_decision`，与 LLM verdict 比较：相同则 final 保留该 verdict；不同则 final=REVIEW_REQUIRED。这是模型解释与固定政策之间的分歧检查，不是人工审核通过，也不是自动生产部署。KEEP 等状态只是本地判断产物，当前不会修改真实流量或执行回滚。
+
+### 第六步：把判断保存成下游资产
+
+成功产生 assessment.json，包含 llm_assessment、rule_decision、validation 和 final。完整闭环将来可读取这些结构化字段，把失败与结论存入实验记忆；目前没有 SQLite 或下一轮自动反馈。
+
+本章目前使用 evidence.json、trace.json、assessment.json 查看输入、响应与结果；尚未接入 Brainstorm 的统一 activity.md 日志。
+
+## 运行与学习验收
 
 ```bash
+mini-agentx ab-evaluate --run <你的ab实验ID>
 python -m unittest discover -s tests -v
 ```
 
-12 项测试通过，新增覆盖数值引用幻觉拒绝、无效输出修复、上下文排除答案与真值、判决分歧转复查、事件被篡改时不调用模型。
+先运行上一章的 ab-run 得到 ID。一次评估后，依次读 evidence、trace、assessment：追踪一条 citation，确认值来自实际证据；核对 verdict 与 final 是否相同，再解释为什么一致或转复查。
 
-## 下一步
+离线测试覆盖幻觉数值拒绝、有限修复、上下文排除规则答案与模拟真值、判决分歧转复查、事件被篡改时不调用模型。测试使用 mock；下面的真实 API 记录单独列出，两者不混用。
 
-Brainstorm：根据任务边界、基线与实验记忆生成提案。随后接 Developing 的代码/训练工具，再串成完整闭环；Evaluation 可进一步升级为按需查询诊断工具的工作流。
+下一步是 Developing 的代码与训练工具，再由编排器连接 Brainstorm → Developing → Evaluation。未来还需要固定候选晋升协议、诊断工具和实验记忆；当前不应声称三个 agent 已经组成完整闭环。
 
 ## 真实 API 验证记录
 

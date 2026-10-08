@@ -91,6 +91,19 @@ MovieLens 100K、BPR 矩阵分解、NDCG/Recall、DeepSeek、SQLite、CLI、Git 
 | 11 | §8.1–8.2、附录 B | 用学习版实验检查机制 |
 | 12 | §7.1.1，图 7，式 7–9 | 简化 SGPO-I 的诊断、修改与配对回放 |
 
+## 已实现章节的阅读入口
+
+| 阶段 | 统一教程 |
+| --- | --- |
+| 工程 | [01-project.md](docs/tutorial/01-project.md) |
+| 数据 | [02-data.md](docs/tutorial/02-data.md) |
+| 模型训练与离线评估 | [03-baseline.md](docs/tutorial/03-baseline.md) |
+| 模拟 A/B 环境 | [04-ab-environment.md](docs/tutorial/04-ab-environment.md) |
+| LLM 评估 | [05-evaluation-agent.md](docs/tutorial/05-evaluation-agent.md) |
+| Brainstorm 契约、工具与生成 | [06-brainstorm.md](docs/tutorial/06-brainstorm.md) |
+
+下面保留按开发依赖安排的实施计划；同一阶段的实际代码讲解集中在上述一篇文档中。未来 Developing 也按“论文机制 → 输入契约 → 工具 → 调用循环 → 验证 → 运行”写成独立章节。
+
 ## 教程实施步骤
 
 每章文档都包括：目标、设计理由、实现过程、关键代码、运行方法、真实结果与常见问题。预期输出和实际输出分开标注。以下路径相对于 `src/mini_agentx/`，教程文档放在 `docs/tutorial/`。

@@ -31,11 +31,12 @@ mini-agentx check-config --config configs/baseline.toml
 
 1. [Python 工程与命令入口](docs/tutorial/01-project.md)
 2. [数据环境](docs/tutorial/02-data.md)：下载、检查、固定划分与 ID 映射。
-3. [推荐基线](docs/tutorial/03-baseline.md)：BPR-MF 训练。
-4. [离线评估](docs/tutorial/04-evaluation.md)：指标与评估协议。
-5. [模拟 A/B 环境](docs/tutorial/04-ab-environment.md)：稳定分桶、合成反馈、用户级统计与护栏。
-6. [DeepSeek Evaluation Agent](docs/tutorial/05-evaluation-agent.md)：盲评证据、结构化判断与程序校验。
-7. [Brainstorm 契约](docs/tutorial/06-brainstorm-contracts.md)、[生成流程](docs/tutorial/06-brainstorm-agent.md) 与 [主动调查工具](docs/tutorial/06-brainstorm-tools.md)。
+3. [推荐基线与可信离线评估](docs/tutorial/03-baseline.md)：BPR-MF、训练、指标协议与验证。
+4. [模拟 A/B 环境](docs/tutorial/04-ab-environment.md)：稳定分桶、合成反馈、用户级统计与护栏。
+5. [Evaluation Agent](docs/tutorial/05-evaluation-agent.md)：从 A/B 证据到 LLM 判断、事实校验与决策。
+6. [Brainstorm Agent 完整教程](docs/tutorial/06-brainstorm.md)：论文对齐、任务与提案契约、工具定义、JSON 调用循环、预算、交接及日志。
+
+每个已实现阶段集中在一篇教程。优先学习 agent 时，先阅读 06，再阅读 05；Developing 及后续闭环的实施步骤见 PLAN.md，尚未实现。
 
 ## 复现范围
 
