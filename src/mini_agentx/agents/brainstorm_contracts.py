@@ -104,7 +104,7 @@ class Proposal:
             field = text(reference["field"], "field")
             actual = evidence[reference["evidence_id"]]["facts"].get(field)
             if field not in evidence[reference["evidence_id"]]["facts"] or not same_value(reference["value"], actual):
-                raise ValueError("证据字段或数值不匹配")
+                raise ValueError(f"证据字段或数值不匹配：{reference['evidence_id']}.{field}；必须使用原始 JSON 值 {actual!r}（{type(actual).__name__}），不能将数值转成字符串")
         changes = value["changes"]
         if not isinstance(changes, list) or (value["maturity"] == "ready" and not changes):
             raise ValueError("ready 提案必须有修改计划")

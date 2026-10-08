@@ -4,7 +4,7 @@
 
 先读 [AgentX §4.1–4.4](https://arxiv.org/html/2606.26859v2#S4)。我们把任务边界、证据、候选成熟度与交接转换为 JSON 契约。代码使用 Python dataclass 和显式校验，这是本地工程选择；不实现原论文动态证据权重或工业人工审查。
 
-本小节仅定义契约、构造上下文和校验，不调用 LLM，不生成实验结果，不改模型。
+本小节介绍契约与校验；DeepSeek 生成流程已在 [下一节](06-brainstorm-agent.md) 接入，不改模型或运行候选实验。
 
 ## 输入：TaskBoundary
 
@@ -82,4 +82,4 @@ mechanism_key 只做精确匹配，不能判断语义重复。程序核对引用
 
 ## 验证与下一步
 
-契约测试覆盖无 ready、越界路径、幻觉引用、指标修改、重复机制、缺 probes、布尔优先级及 avoid_set。真实基线上下文已生成。下一步写提示词并调用 DeepSeek，产生通过本契约校验的候选批次，再持久化选中提案。
+契约测试覆盖无 ready、越界路径、幻觉引用、指标修改、重复机制、缺 probes、布尔优先级及 avoid_set。真实基线上下文已生成。生成调用、有限修复及持久化交接见 [Brainstorm Agent](06-brainstorm-agent.md)。

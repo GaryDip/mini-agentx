@@ -5,7 +5,7 @@
   "primary_metric": "ndcg@10",
   "allowed_files": ["model.py", "training.toml"],
   "forbidden_changes": ["数据划分和词表", "评估器与指标口径", "A/B 模拟器及其反馈参数", "测试标签和测试结果", "API 密钥和编排程序"],
-  "constraints": ["使用 CPU", "每个候选只验证一个主要机制", "训练负采样不得参考留出标签", "候选只能修改独立实验目录中的白名单文件", "不能将模拟 A/B 结果声称为真实业务收益"],
+  "constraints": ["使用 CPU", "每个候选只验证一个主要机制", "训练负采样不得参考留出标签", "候选只能修改独立实验目录中的白名单文件", "model.py 仅修改模型表示和打分；固定训练器的 BPR 损失及采样逻辑不可改", "training.toml 仅支持 dimensions、learning_rate、batch_size、epochs、l2、threads", "不能将模拟 A/B 结果声称为真实业务收益"],
   "unknowns": ["尚未验证模型误差的具体原因", "当前没有历史候选实验记忆"],
   "candidate_count": 3,
   "max_training_seconds": 60

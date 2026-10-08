@@ -53,6 +53,13 @@ def main() -> None:
     proposals_parser = subparsers.add_parser("check-proposals", help="校验候选提案及交接，不执行实验")
     proposals_parser.add_argument("--context", required=True)
     proposals_parser.add_argument("--proposals", required=True)
+    brainstorm_parser = subparsers.add_parser("brainstorm", help="调用 DeepSeek 生成并校验优化提案")
+    brainstorm_source = brainstorm_parser.add_mutually_exclusive_group(required=True)
+    brainstorm_source.add_argument("--baseline-run", help="自动构造真实基线上下文")
+    brainstorm_source.add_argument("--context", help="使用已有上下文 JSON")
+    brainstorm_parser.add_argument("--task", default="configs/brainstorm-task.json")
+    brainstorm_parser.add_argument("--config", default="configs/baseline.toml")
+    brainstorm_parser.add_argument("--llm-config", default="configs/brainstorm-llm.toml")
     args = parser.parse_args()
     if args.command in ("check-config", "prepare-data"):
         try:
@@ -118,6 +125,20 @@ def main() -> None:
                 context = json.loads(Path(args.context).read_text())
                 batch = json.loads(Path(args.proposals).read_text())
                 result = validate_batch(batch, context)
+        except (OSError, ValueError, KeyError) as error:
+            parser.error(str(error))
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    elif args.command == "brainstorm":
+        from pathlib import Path
+        from mini_agentx.agents.brainstorm_context import build_context
+        from mini_agentx.agents.brainstorm import generate_proposals
+        from mini_agentx.llm.client import DeepSeekClient
+        try:
+            runs = Path(load_config(args.config)["paths"]["runs"])
+            context_path = args.context
+            if args.baseline_run:
+                context_path = build_context(runs / args.baseline_run, args.task, runs)["context_path"]
+            result = generate_proposals(context_path, runs, DeepSeekClient(args.llm_config))
         except (OSError, ValueError, KeyError) as error:
             parser.error(str(error))
         print(json.dumps(result, ensure_ascii=False, indent=2))
