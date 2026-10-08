@@ -1,0 +1,6 @@
+seed = 42
+
+[paths]
+raw_data = "data/raw"
+processed_data = "data/processed"
+runs = "runs"

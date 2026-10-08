@@ -10,7 +10,7 @@
 
 阅读 [教程路线图 PLAN.md](PLAN.md)，每章包含目标、实现步骤、方法和验收条件。
 
-当前已完成 Python 包结构和命令入口，训练与 agent 尚未实现。教程中的后续命令仍是目标接口。
+教程 01 已完成：Python 包结构、命令入口、配置读取和运行目录规范。训练与 agent 尚未实现，教程中的后续命令仍是目标接口。
 
 ## 安装与运行
 
@@ -22,6 +22,7 @@ conda activate mini-agentx
 python -m pip install -e .
 mini-agentx --help
 mini-agentx --version
+mini-agentx check-config --config configs/baseline.toml
 ```
 
 如果已经创建环境，只需激活环境，无需重复创建。

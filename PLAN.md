@@ -113,7 +113,7 @@ MovieLens 100K、BPR 矩阵分解、NDCG/Recall、DeepSeek、SQLite、CLI、Git 
 
 1. 检查本机 Python，创建虚拟环境，记录适配 PyTorch 的版本。 **〔工程支撑；§3〕**
 2. 创建 `pyproject.toml`，使用可编辑安装；先只添加训练和配置依赖。 **〔工程支撑；§3〕**
-3. 建立 `cli.py`、`configs/baseline.yaml` 和运行目录规范；CLI 只负责参数和调用，不承载训练逻辑。 **〔工程支撑；§3〕**
+3. 建立 `cli.py`、`configs/baseline.toml` 和运行目录规范；CLI 只负责参数和调用，不承载训练逻辑。 **〔工程支撑；§3〕**
 4. 写 `01-project.md`，解释配置、模块和入口的关系。 **〔工程支撑；§3〕**
 
 目标命令：`mini-agentx --help`。验收：干净环境可安装，帮助命令可运行；此时不需要 API。
@@ -142,7 +142,7 @@ MovieLens 100K、BPR 矩阵分解、NDCG/Recall、DeepSeek、SQLite、CLI、Git 
 4. 固定 seed，记录 loss、耗时、配置和 checkpoint；只使用验证集选择权重。 **〔简化实现；§5.2.1〕**
 5. 同一种子重复训练，增加热门推荐参照，检查数据与训练是否合理。 **〔工程支撑；§5.2.2〕**
 
-目标命令：`mini-agentx train --config configs/baseline.yaml`。验收：CPU 真实训练完成，权重可加载，结果可重复；记录实际耗时。
+目标命令：`mini-agentx train --config configs/baseline.toml`。验收：CPU 真实训练完成，权重可加载，结果可重复；记录实际耗时。
 
 ### 04：可信评估与产物契约
 
@@ -264,8 +264,9 @@ MovieLens 100K、BPR 矩阵分解、NDCG/Recall、DeepSeek、SQLite、CLI、Git 
 - [x] 确认学习范围、DeepSeek 与后续 SGPO。
 - [x] 教程路线图和 README。
 - [x] 00：本地 Git 初始化和首次提交。
-- [ ] 00：GitHub 仓库创建与推送。
-- [ ] 01–04：工程、数据、基线与评估。
+- [x] 00：GitHub 仓库创建与推送。
+- [x] 01：工程、命令入口、配置与目录规范。
+- [ ] 02–04：数据、基线与评估。
 - [ ] 05–08：API、三个 agent 与单轮闭环。
 - [ ] 09–10：记忆、多轮、预算与恢复。
 - [ ] 11：完整演示与实验复核。
@@ -273,4 +274,4 @@ MovieLens 100K、BPR 矩阵分解、NDCG/Recall、DeepSeek、SQLite、CLI、Git 
 
 ## 协作节奏
 
-一次推进一个教程章节。每章解释设计、实现代码、运行必要验证、写教程和真实结果、提交 Git 并更新进度。当前先完成仓库准备；之后从教程 01 开始。API 模型名、预算和代码隔离方式在对应章节落实。
+一次推进一个教程章节。每章解释设计、实现代码、运行必要验证、写教程和真实结果、提交 Git 并更新进度。教程 01 完成后，优先学习 06 的 Brainstorm 输入输出契约，再结合 05 接入 DeepSeek；初期证据使用明确标注的示例，不计为真实实验。02–04 在接入开发与评估 agent 前完成，完整闭环仍使用真实训练与评估。API 模型名、预算和代码隔离方式在对应章节落实。
