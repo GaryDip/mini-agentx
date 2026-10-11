@@ -45,12 +45,12 @@ validation 应定义可观测的机制、同数据同种子的父模型对照以
 """
 
 
-def generate_proposals(context_path, runs, client, tools=None):
+def generate_proposals(context_path, runs, client, tools=None, activity=None, destination=None):
     context = json.loads(Path(context_path).read_text())
     validate_context(context)
-    destination = Path(runs) / ("brainstorm-" + uuid.uuid4().hex[:12])
+    destination = Path(destination) if destination is not None else Path(runs) / ("brainstorm-" + uuid.uuid4().hex[:12])
     destination.mkdir(parents=True)
-    activity = ActivityLog(destination)
+    activity = ActivityLog(destination, parent=activity)
     activity.record("开始任务", result={"parent_run_id": context["parent_run_id"], "task": context["task"]})
     (destination / "context.json").write_text(json.dumps(context, ensure_ascii=False, indent=2) + "\n")
     tool_prompt = ""

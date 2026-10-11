@@ -77,6 +77,16 @@ def main() -> None:
     feedback_parser.add_argument("--baseline-run", required=True)
     feedback_parser.add_argument("--feedback-id")
     feedback_parser.add_argument("--config", default="configs/baseline.toml")
+    iterate_parser = subparsers.add_parser("iterate", help="串联多轮agent并输出统一行动日志")
+    iterate_parser.add_argument("--baseline-run", required=True)
+    iterate_parser.add_argument("--rounds", type=int, default=1)
+    iterate_parser.add_argument("--max-model-calls", type=int)
+    iterate_parser.add_argument("--config", default="configs/baseline.toml")
+    iterate_parser.add_argument("--task", default="configs/brainstorm-task.json")
+    iterate_parser.add_argument("--ab-config", default="configs/abtest.toml")
+    iterate_parser.add_argument("--brainstorm-llm-config", default="configs/brainstorm-llm.toml")
+    iterate_parser.add_argument("--developing-llm-config", default="configs/developing-llm.toml")
+    iterate_parser.add_argument("--evaluation-llm-config", default="configs/llm.toml")
     args = parser.parse_args()
     if args.command in ("check-config", "prepare-data"):
         try:
@@ -162,6 +172,22 @@ def main() -> None:
         except (OSError, ValueError, KeyError) as error:
             parser.error(str(error))
         print(json.dumps(result, ensure_ascii=False, indent=2))
+    elif args.command == "iterate":
+        from pathlib import Path
+        from mini_agentx.workflow.runner import iterate
+        from mini_agentx.llm.client import DeepSeekClient
+        try:
+            runs = Path(load_config(args.config)["paths"]["runs"])
+            clients = {"brainstorm": DeepSeekClient(args.brainstorm_llm_config),
+                       "developing": DeepSeekClient(args.developing_llm_config),
+                       "evaluation": DeepSeekClient(args.evaluation_llm_config)}
+            result = iterate(Path.cwd(), runs, args.baseline_run, args.rounds, clients,
+                             args.task, args.ab_config, args.max_model_calls)
+        except (OSError, ValueError, KeyError) as error:
+            parser.error(str(error))
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        if result["status"] == "failed":
+            raise SystemExit(1)
     elif args.command in ("remember", "feedback"):
         from pathlib import Path
         import re

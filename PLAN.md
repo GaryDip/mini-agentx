@@ -104,6 +104,7 @@ MovieLens 100K、BPR 矩阵分解、NDCG/Recall、DeepSeek、SQLite、CLI、Git 
 | Developing 工具与候选训练 | [07-developing.md](docs/tutorial/07-developing.md) |
 | 候选 A/B 与 Evaluation 交接 | [08-candidate-evaluation.md](docs/tutorial/08-candidate-evaluation.md) |
 | 实验反馈与记忆 | [09-experiment-memory.md](docs/tutorial/09-experiment-memory.md) |
+| 统一工作流与日志 | [10-workflow.md](docs/tutorial/10-workflow.md) |
 
 下面保留按开发依赖安排的实施计划；同一阶段的实际代码讲解集中在上述一篇文档中。未来 Developing 也按“论文机制 → 输入契约 → 工具 → 调用循环 → 验证 → 运行”写成独立章节。
 
@@ -293,9 +294,10 @@ MovieLens 100K、BPR 矩阵分解、NDCG/Recall、DeepSeek、SQLite、CLI、Git 
 - [ ] 06 扩展：论文检索、完整实验记忆、动态证据检索与多批残余探索。
 - [x] 07：Developing 候选工具、macOS 隔离检查/训练、DeepSeek 调用循环、每轮请求及交接。
 - [x] 08 部分：自定义模型 A/B 隔离加载、Developing 到 Evaluation 交接与请求保存。
-- [ ] 08 剩余：三个 agent 单轮统一编排。
+- [x] 08：三个 agent 单轮统一编排。
 - [x] 09部分：SQLite反馈、实际观测与未验证解释分离、Brainstorm反馈查询。
-- [ ] 09–10剩余：自动多轮、统一预算与恢复。
+- [x] 10部分：固定父模型的自动多轮、总调用预算、统一可读日志与请求保存。
+- [ ] 10剩余：中断恢复、自动晋升和更多失败记忆。
 - [ ] 11：完整演示与实验复核。
 - [ ] 12：简化 SGPO。
 

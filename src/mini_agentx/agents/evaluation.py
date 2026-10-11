@@ -85,7 +85,7 @@ def interpretation_warnings(output, evidence):
     return warnings
 
 
-def evaluate_experiment(run, client):
+def evaluate_experiment(run, client, activity=None):
     report = json.loads((run / "report.json").read_text())
     if report.get("simulated") is not True:
         raise ValueError("只支持模拟 A/B 报告")
@@ -97,23 +97,30 @@ def evaluate_experiment(run, client):
                 {"role": "user", "content": json.dumps(evidence, ensure_ascii=False)}]
     destination = run / "evaluations" / uuid.uuid4().hex[:12]
     destination.mkdir(parents=True)
+    from .activity_log import ActivityLog
+    activity = ActivityLog(destination, "Evaluation", parent=activity)
+    activity.record("准备评估证据", reason="依据模拟观测判断；去掉规则答案，不读取私有参数", result=evidence)
     (destination / "evidence.json").write_text(json.dumps(evidence, ensure_ascii=False, indent=2) + "\n")
     attempts = []
     from mini_agentx.llm.client import LLMError
     output = None
     for attempt in range(client.config["max_attempts"]):
         (destination / f"request-{attempt + 1:02}.json").write_text(json.dumps(messages, ensure_ascii=False, indent=2) + "\n")
+        activity.record(f"调用模型：第 {attempt + 1} 次", result={"message_count": len(messages), "request_file": str(destination / f"request-{attempt + 1:02}.json")})
         try:
             candidate, metadata = client.complete(messages)
         except LLMError as error:
+            activity.record("模型调用失败", result={"error": str(error)})
             attempts.append({"attempt": attempt + 1, "status": "api_failed", "error": str(error)})
             if "HTTP 4" in str(error) and "HTTP 429" not in str(error):
                 break
             continue
         record = {"attempt": attempt + 1, **metadata, "response": candidate}
+        activity.record("模型返回评估", reason=candidate.get("rationale") if isinstance(candidate, dict) else None, result=candidate)
         try:
             validate_output(candidate, evidence)
         except ValueError as error:
+            activity.record("引用或格式检查失败，反馈模型修复", result={"error": str(error)})
             record.update(status="invalid_output", error=str(error))
             attempts.append(record)
             messages.append({"role": "assistant", "content": json.dumps(candidate, ensure_ascii=False)})
@@ -125,6 +132,7 @@ def evaluate_experiment(run, client):
         break
     (destination / "trace.json").write_text(json.dumps({"system_prompt": SYSTEM_PROMPT, "attempts": attempts}, ensure_ascii=False, indent=2) + "\n")
     if output is None:
+        activity.record("评估失败，未产生有效结论")
         raise ValueError(f"LLM 评估失败；脱敏诊断保存在 {destination}/trace.json")
     rule = report["analysis"]["rule_decision"]
     matched = output["verdict"] == rule["verdict"]
@@ -136,4 +144,5 @@ def evaluate_experiment(run, client):
                         "reason": "interpretation_conflict" if warnings else ("validated_assessment" if matched else "llm_rule_disagreement")},
               "evaluation_directory": str(destination)}
     (destination / "assessment.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
+    activity.record("程序复核后的最终判断", result={"final": result["final"], "validation": result["validation"]})
     return result

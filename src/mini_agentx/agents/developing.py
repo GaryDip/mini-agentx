@@ -18,9 +18,9 @@ finish 不等于方案提升；程序会检查当前文件版本及训练产物�
 reason 是公开简短行动说明，不是内部思维链。"""
 
 
-def develop(tools, client):
+def develop(tools, client, activity=None):
     directory = tools.directory
-    activity = ActivityLog(directory, "Developing")
+    activity = ActivityLog(directory, "Developing", parent=activity)
     prompt = SYSTEM_PROMPT + "\n工具定义：" + json.dumps(tools.SPECS, ensure_ascii=False)
     initial = {"task": tools.task.__dict__, "proposal": tools.proposal,
                "parent_run_id": tools.parent["run_id"], "dataset_version": tools.parent["dataset_version"],

@@ -10,7 +10,7 @@ from mini_agentx.agents.activity_log import ActivityLog
 from mini_agentx.agents.evaluation import evaluate_experiment
 
 
-def run_candidate_evaluation(development, runs, ab_config, client=None):
+def run_candidate_evaluation(development, runs, ab_config, client=None, activity=None, directory=None):
     runs = Path(runs).resolve()
     development = Path(development).resolve()
     if not development.is_relative_to(runs):
@@ -32,9 +32,9 @@ def run_candidate_evaluation(development, runs, ab_config, client=None):
         raise ValueError('实际训练模型与开发源码不同')
     if report['dataset_version'] != handoff['result']['dataset_version']:
         raise ValueError('训练数据版本与交接不一致')
-    directory = runs / ('candidate-evaluation-' + uuid.uuid4().hex[:12])
+    directory = Path(directory) if directory is not None else runs / ('candidate-evaluation-' + uuid.uuid4().hex[:12])
     directory.mkdir()
-    activity = ActivityLog(directory, 'Candidate Evaluation')
+    activity = ActivityLog(directory, 'A/B环境与交接', parent=activity)
     state = {'status': 'running', 'development_directory': str(development),
              'parent_run_id': handoff['parent_run_id'], 'candidate_training_run': str(candidate),
              'proposal_id': handoff['proposal_id'], 'simulated': True, 'promoted': False}
@@ -46,7 +46,7 @@ def run_candidate_evaluation(development, runs, ab_config, client=None):
         try:
             feedback = import_feedback(runs, directory.name)
             state['feedback_id'] = feedback['feedback_id']
-            activity.record('实验反馈已保存', result={'feedback_id': feedback['feedback_id'], 'final_verdict': feedback['final_verdict']})
+            activity.record('实验反馈已保存', reason='将可信观测与待复查限制提供给下一轮，原始LLM解释不作为事实回传', result=feedback)
         except (OSError, ValueError, KeyError, TypeError, sqlite3.Error) as error:
             state['feedback_error'] = str(error)
             activity.record('反馈保存失败，实验结果仍保留', result={'error': str(error)})
@@ -62,7 +62,7 @@ def run_candidate_evaluation(development, runs, ab_config, client=None):
         activity.record('A/B观测完成', result={'primary': ab['analysis']['primary'], 'simulated': True})
         if client is not None:
             activity.record('调用Evaluation Agent', reason='分析观测；移除规则答案，不读取私有场景参数')
-            assessment = evaluate_experiment(runs / ab['experiment_id'], client)
+            assessment = evaluate_experiment(runs / ab['experiment_id'], client, activity=activity)
             state['assessment'] = assessment
             state['status'] = 'evaluated'
             activity.record('Evaluation完成', result=assessment['final'])

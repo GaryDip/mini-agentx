@@ -160,7 +160,7 @@ python -m unittest discover -s tests -v
 
 测试覆盖重复导入更新、按父模型与数据版本筛选、错误解释不回传、事件篡改拒绝，以及反馈进入模拟客户端的下一次 messages。真实 DeepSeek 调用另行验证，失败也保留，不把 mock 当成实际使用记忆的证据。
 
-下一步才是统一多轮编排和恢复：串起 Brainstorm → Developing → A/B → Evaluation → 反馈。当前可以手动完成这个链条，但还没有自动多轮运行或 champion 更新。
+[第10章](10-workflow.md) 已串起固定父模型的多轮流程与统一日志。阶段恢复和 champion 更新尚未实现。
 
 ## 本地真实调用示例
 

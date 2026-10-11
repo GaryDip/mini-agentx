@@ -30,7 +30,7 @@ class DevelopingTools:
         "get_candidate_diff": {"arguments": {}, "description": "查看相对父文件的差异"},
     }
 
-    def __init__(self, root, runs, proposal_path):
+    def __init__(self, root, runs, proposal_path, directory=None):
         self.root, self.runs = Path(root).resolve(), Path(runs).resolve()
         envelope = json.loads(Path(proposal_path).read_text())
         if envelope.get("schema_version") != 1:
@@ -52,7 +52,7 @@ class DevelopingTools:
             raise ValueError("父代码与当前基线不同，不能复制")
         if envelope["dataset_version"] != self.parent["dataset_version"]:
             raise ValueError("提案与父实验数据版本不同")
-        self.directory = self.runs / ("developing-" + uuid.uuid4().hex[:12])
+        self.directory = Path(directory) if directory is not None else self.runs / ("developing-" + uuid.uuid4().hex[:12])
         self.directory.mkdir(parents=True)
         self.candidate = self.directory / "candidate"
         self.candidate.mkdir()
