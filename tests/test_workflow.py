@@ -20,7 +20,12 @@ class WorkflowTest(unittest.TestCase):
         runs = root / 'runs'
         parent = runs / 'baseline-0123456789ab'
         parent.mkdir(parents=True)
-        (parent / 'report.json').write_text('{}')
+        import hashlib
+        code = root / 'src/mini_agentx/recommender/model.py'
+        code.parent.mkdir(parents=True)
+        code.write_text('# mock model')
+        (parent / 'model.pt').write_bytes(b'mock weights')
+        (parent / 'report.json').write_text(json.dumps({'run_id': parent.name, 'model_source_sha256': hashlib.sha256(code.read_bytes()).hexdigest(), 'checkpoint_sha256': hashlib.sha256(b'mock weights').hexdigest(), 'config': {'training': {}}}))
         context = root / 'context.json'
         context.write_text(json.dumps({'task': {}, 'evidence': [], 'parent_run_id': parent.name}))
         return runs, parent.name, context
@@ -52,6 +57,9 @@ class WorkflowTest(unittest.TestCase):
                 return {'handoff_status': 'ready'}
             def development(tools, client, activity=None):
                 order.append('developing')
+                folder = Path(tools.directory)
+                folder.mkdir(exist_ok=True)
+                (folder / 'handoff.json').write_text(json.dumps({'training_run': str(runs / parent)}))
                 client.complete([{'role': 'user', 'content': 'mock proposal'}])
                 return {'result': {'ndcg_delta': .01}}
             def evaluation(*args, **kwargs):
@@ -59,7 +67,7 @@ class WorkflowTest(unittest.TestCase):
                 args[3].complete([{'role': 'user', 'content': 'mock evidence'}])
                 return {'ab_run_id': 'ab-111111111111', 'assessment': {'final': {'verdict': 'EXTEND'}}, 'feedback_id': 'feedback-222222222222'}
             clients = {name: Client() for name in ('brainstorm', 'developing', 'evaluation')}
-            with patch('mini_agentx.workflow.runner.build_context', return_value={'context_path': str(context)}) as build, patch('mini_agentx.workflow.runner.BrainstormTools'), patch('mini_agentx.workflow.runner.DevelopingTools'), patch('mini_agentx.workflow.runner.generate_proposals', side_effect=brainstorm), patch('mini_agentx.workflow.runner.develop', side_effect=development), patch('mini_agentx.workflow.runner.run_candidate_evaluation', side_effect=evaluation):
+            with patch('mini_agentx.workflow.runner.build_context', return_value={'context_path': str(context)}) as build, patch('mini_agentx.workflow.runner.BrainstormTools'), patch('mini_agentx.workflow.runner.DevelopingTools', side_effect=lambda *args, **kwargs: type('Tools', (), {'directory': kwargs['directory']})()), patch('mini_agentx.workflow.runner.generate_proposals', side_effect=brainstorm), patch('mini_agentx.workflow.runner.develop', side_effect=development), patch('mini_agentx.workflow.runner.run_candidate_evaluation', side_effect=evaluation):
                 result = iterate(root, runs, parent, 2, clients)
                 self.assertEqual(result['status'], 'completed')
                 self.assertEqual(order, ['brainstorm', 'developing', 'evaluation'] * 2)

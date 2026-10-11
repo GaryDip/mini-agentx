@@ -57,13 +57,32 @@ class FeedbackStore:
                  datetime.now(timezone.utc).isoformat(), json.dumps(record, ensure_ascii=False, allow_nan=False)))
         return record
 
+    def lineage(self, parent_run, dataset_version):
+        parents = []
+        while parent_run not in parents:
+            if not isinstance(parent_run, str) or not re.fullmatch(r'baseline-[a-f0-9]{12}', parent_run):
+                break
+            parents.append(parent_run)
+            report_path = safe_path(self.runs, self.runs / parent_run / 'report.json')
+            if not report_path.exists():
+                break
+            report = json.loads(report_path.read_text())
+            if report.get('dataset_version') != dataset_version:
+                break
+            ancestor = report.get('promotion', {}).get('parent_run_id')
+            if not ancestor:
+                break
+            parent_run = ancestor
+        return parents or [parent_run]
+
     def list(self, parent_run, dataset_version):
         if not self.path.exists():
             return []
+        parents = self.lineage(parent_run, dataset_version)
+        placeholders = ','.join('?' for _ in parents)
         with self._connect() as connection:
-            rows = connection.execute('''SELECT payload FROM feedback
-                WHERE parent_run=? AND dataset_version=? ORDER BY updated_at DESC, feedback_id LIMIT 20''',
-                (parent_run, dataset_version)).fetchall()
+            rows = connection.execute(f'SELECT payload FROM feedback WHERE parent_run IN ({placeholders}) AND dataset_version=? ORDER BY updated_at DESC, feedback_id LIMIT 20',
+                                      (*parents, dataset_version)).fetchall()
         return [public_feedback(json.loads(row['payload'])) for row in rows]
 
     def read(self, identifier, parent_run, dataset_version):
@@ -71,12 +90,13 @@ class FeedbackStore:
             raise ValueError('反馈ID无效')
         if not self.path.exists():
             raise ValueError('反馈记录不存在')
+        parents = self.lineage(parent_run, dataset_version)
+        placeholders = ','.join('?' for _ in parents)
         with self._connect() as connection:
-            row = connection.execute('''SELECT payload FROM feedback
-                WHERE feedback_id=? AND parent_run=? AND dataset_version=?''',
-                (identifier, parent_run, dataset_version)).fetchone()
+            row = connection.execute(f'SELECT payload FROM feedback WHERE feedback_id=? AND parent_run IN ({placeholders}) AND dataset_version=?',
+                                     (identifier, *parents, dataset_version)).fetchone()
         if row is None:
-            raise ValueError('反馈不存在或不属于当前父实验及数据版本')
+            raise ValueError('反馈不存在或不属于当前基线链及数据版本')
         return public_feedback(json.loads(row['payload']))
 
 

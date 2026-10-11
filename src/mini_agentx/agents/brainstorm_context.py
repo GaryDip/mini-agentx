@@ -21,7 +21,7 @@ def build_context(baseline, task_path, runs):
         "evidence": [
             {"evidence_id": "system-model", "source": "system_kb", "status": "documented",
              "facts": {"model": report["model"], "dimensions": report["config"]["training"]["dimensions"],
-                       "scoring": "user/item embedding dot product", "loss": "BPR with L2 regularization",
+                       "scoring": "读取当前父模型源码确认实际打分方法", "loss": "BPR with L2 regularization",
                        "features": "user and item IDs only", "metric": "ndcg@10",
                        "model_interface": "MatrixFactorization(users, items, dimensions); score(user_ids, item_ids); score_all()",
                        "learning_rate": report["config"]["training"]["learning_rate"],
@@ -46,7 +46,7 @@ def build_context(baseline, task_path, runs):
     if records:
         context["task"]["unknowns"] = [value for value in context["task"]["unknowns"] if value != "当前没有历史候选实验记忆"]
         context["evidence"].append({"evidence_id": "experiment-memory", "source": "experiment_kb", "status": "observed",
-                                    "facts": {"count": len(records), "scope": "same_parent_and_dataset", "tool": "list_feedback"}})
+                                    "facts": {"count": len(records), "scope": "baseline_lineage_and_dataset", "tool": "list_feedback"}})
     validate_context(context)
     output = Path(runs) / ("brainstorm-input-" + uuid.uuid4().hex[:12])
     output.mkdir(parents=True)

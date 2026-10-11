@@ -85,9 +85,17 @@ class BrainstormTools:
             if not isinstance(path, str) or path not in self.FILES:
                 raise ValueError("文件不在只读白名单")
             target = self.safe_file(self.root, path)
+            if path == "src/mini_agentx/recommender/model.py":
+                parent_path = self.safe_file(self.runs, f"{self.parent}/report.json")
+                parent_report = json.loads(parent_path.read_text()) if parent_path.exists() else {}
+                if parent_report.get("candidate_source") == "candidate_model.py":
+                    target = self.safe_file(self.runs, f"{self.parent}/candidate_model.py")
+                    if hashlib.sha256(target.read_bytes()).hexdigest() != parent_report["model_source_sha256"]:
+                        raise ValueError("父模型源码摘要不匹配")
             if target.stat().st_size > 24000:
                 raise ValueError("文件超过读取大小上限")
             return "system_kb", {"path": path, "content": target.read_text(),
+                                  "actual_source": str(target), "parent_run_id": self.parent,
                                   "sha256": hashlib.sha256(target.read_bytes()).hexdigest()}
         if name == "read_experiment":
             return "experiment_kb", self.experiment(arguments["run_id"])

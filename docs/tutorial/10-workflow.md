@@ -9,7 +9,8 @@
 3. 共享一份主日志，保留轮次与 agent 身份。
 4. 在阶段预算之外增加整次运行的调用预算。
 5. 反馈写入成功后再开始下一轮，重新准备上下文。
-6. 正常结果、没有可执行方案、执行失败分别记录。
+6. 可信 KEEP 后保存新基线，下一轮使用它的代码和配置。
+7. 正常结果、没有可执行方案、执行失败分别记录。
 
 经验：一个调用循环并不会自动变成多 agent 流程。需要程序明确“谁先做、谁拿谁的输出、什么时候停止”。完成一轮不等于候选有效，也不等于全部轮次成功。
 
@@ -24,7 +25,7 @@
 | 三个 agent | 调查提案、开发训练、评价观测 | 前面的06、07、05章节 |
 | 反馈 | 每轮结果 → 下一轮查询记录 | 第09章 |
 
-对应 [AgentX §3](https://arxiv.org/html/2606.26859v2#S3) 的阶段协作目标。这里采用串行多轮、固定父模型作为教学实现；没有工业并行调度、自动晋升或 SGPO。
+对应 [AgentX §3](https://arxiv.org/html/2606.26859v2#S3) 的阶段协作目标。这里采用串行多轮和动态基线作为教学实现；没有工业并行调度或 SGPO。
 
 ## 2. 一轮到底怎么接
 
@@ -44,7 +45,7 @@ Evaluation：统计证据 → 判断、引用、程序复核
 下一轮重新 build_context，查询刚写入的反馈
 ```
 
-每轮都基于命令指定的同一个 baseline，并独立从头训练候选。KEEP 不自动成为新父模型，promoted=false；当前不支持自动冠军更新。多轮的联系来自实验反馈，不是累积修改同一份代码。
+命令中的 baseline 是起始基线。每轮候选与当时的基线比较；可信 KEEP 后，候选的源码、配置和权重被保存为新基线，下一轮在它的源码和配置上继续修改。训练仍从头开始，不加载父权重续训。未采纳时基线保持不变。
 
 ## 3. 先看 runner 的控制流程
 
@@ -138,7 +139,7 @@ rounds 范围1..5；默认总调用预算为每轮24次，包含Brainstorm最多
 
 ## 9. 本地演示与练习
 
-真实两轮运行 workflow-55e7c6e349b1：第一轮完整经过提案、开发、模型A/B、Evaluation和反馈，判决EXTEND。第二轮读取新反馈，但两次提案校验失败，工作流在Brainstorm停止。共23次实际模型调用，主日志包含两个轮次、三个agent、A/B环境及编排程序动作。
+旧版固定基线的真实两轮运行 workflow-55e7c6e349b1（升级功能新增前）：第一轮完整经过提案、开发、模型A/B、Evaluation和反馈，判决EXTEND。第二轮读取新反馈，但两次提案校验失败，工作流在Brainstorm停止。共23次实际模型调用，主日志包含两个轮次、三个agent、A/B环境及编排程序动作。
 
 这个例子展示正常交接与失败停止，不是“两轮全部成功”。失败原响应和错误都保留，不能为了展示成功删除。
 
@@ -150,4 +151,64 @@ python -m unittest discover -s tests -v
 
 测试覆盖两轮阶段顺序、每轮重新构造上下文、总预算耗尽停止、无 ready 不进入开发、子日志保留轮次和agent。mock 两轮验证流程，真实调用演示单独记录。
 
-下一步可以实现按已保存阶段恢复、更多失败记忆和候选晋升协议，再考虑 SGPO；不需要先增加新agent。
+下一步可以实现按已保存阶段恢复、更多失败记忆，再考虑 SGPO；不需要先增加新agent。
+
+## 10. 五轮中只升级两次，代码怎样实现
+
+先明确采纳条件，再写替换逻辑。我们沿用模拟 A/B 的规则：最终判断必须为 KEEP，引用已校验、LLM 与规则一致、文字没有被检查出冲突。只有离线 NDCG 提升而 A/B 为 EXTEND 时不升级。这里的采纳是模拟环境下的采纳，不代表真实线上效果。
+
+例如五轮的判决是 KEEP、EXTEND、KEEP、DISCARD、REVIEW_REQUIRED：
+
+| 轮次 | 当轮基线 | 是否采纳 | 下一轮基线 |
+| --- | --- | --- | --- |
+| 1 | v00 | 是 | v01 |
+| 2 | v01 | 否 | v01 |
+| 3 | v01 | 是 | v02 |
+| 4 | v02 | 否 | v02 |
+| 5 | v02 | 否 | v02 |
+
+这个表是测试场景，不是一次真实 DeepSeek 运行的结果。
+
+打开 `workflow/runner.py`：每轮开始从 `state['current_baseline_run']` 获取父模型。评估和反馈成功后检查 KEEP；再调用 `workflow/models.py` 的 `promote`，生成新的 baseline ID，最后更新 current_baseline_run。状态包含 baseline_versions、promotions，各轮包含 baseline_run、adopted、new_baseline_run。主日志明确记录“采纳候选并升级基线”或“保留当前基线”。
+
+### 每种模型保存在哪里
+
+```text
+runs/workflow-<id>/
+  activity.md
+  status.json
+  report.json
+  models/
+    baselines/
+      v00/   # 初始基线
+      v01/   # 第一次采纳后的基线
+      v02/   # 第二次采纳后的基线
+    candidates/
+      round-01/
+      round-02/
+      round-03/
+      round-04/
+      round-05/
+```
+
+每个模型目录包含 model.pt（权重）、candidate_model.py（模型源码）、training.toml（训练配置）、report.json（指标和摘要）。候选还包含 decision.json，标明是否采纳、当轮基线和评估位置。训练完成就归档候选，因此评估失败时模型仍可查看；评估未完成时不会有采纳决定。尚未训练成功的轮次，其开发目录与失败日志仍保留。
+
+采纳后的新基线也存放在 runs/baseline-<id>，供已有工具和 A/B 加载。工作流目录中的版本是完整副本，不是依赖原目录的符号链接。report.json 的 promotion 字段记录父基线、候选训练 ID、评估目录和采纳条件。不要手动替换这些文件，否则摘要校验会拒绝使用。
+
+### 为什么修改 runner 还不够
+
+Brainstorm 的 read_file 原来总读项目中的初始 model.py。现在该路径代表当前父模型的代码，返回 actual_source 和 parent_run_id；父模型带有候选快照时实际读取 candidate_model.py。否则它会针对旧代码提出方案。
+
+Developing 原来总复制项目初始代码。现在先读取父报告的 candidate_source，再复制父模型快照，并核对源码和权重摘要。配置来自父报告。因此第二次修改保留第一次已采纳的代码和参数。
+
+实验记忆原来只查同一个父模型。现在沿 report.promotion.parent_run_id 找到当前基线及祖先，再按同一数据版本查询反馈。每条反馈仍保留实际 parent_run_id，不把旧基线的效果当成相对新基线的效果。无关分支的反馈不会进入当前链。
+
+### 如何验证
+
+`tests/test_model_promotion.py` 用五轮确定的评估结果验证两次升级，检查每轮父模型、三版基线、五个候选的完整文件，以及新基线能查询祖先反馈。mock 只用于验证控制流程，不替代模型效果评估。
+
+```bash
+mini-agentx iterate --baseline-run baseline-c30ead6da742 --rounds 5
+```
+
+最后查看 report.json 的 current_baseline_run 和 promotions，再打开 models/baselines 中已采纳的模型。默认最多 120 次 LLM 请求，遇到失败仍停止；当前不支持断点恢复。

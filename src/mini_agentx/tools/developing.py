@@ -45,7 +45,9 @@ class DevelopingTools:
         if parent.is_symlink() or (parent / "report.json").is_symlink():
             raise ValueError("父实验不允许符号链接")
         self.parent = json.loads((parent / "report.json").read_text())
-        source = self.root / "src/mini_agentx/recommender/model.py"
+        source = parent / "candidate_model.py" if self.parent.get("candidate_source") == "candidate_model.py" else self.root / "src/mini_agentx/recommender/model.py"
+        if source.is_symlink():
+            raise ValueError("父模型源码不允许符号链接")
         if digest(parent / "model.pt") != self.parent["checkpoint_sha256"]:
             raise ValueError("父权重摘要不匹配")
         if digest(source) != self.parent["model_source_sha256"]:

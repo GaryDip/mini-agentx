@@ -10,7 +10,7 @@
 
 阅读 [教程路线图 PLAN.md](PLAN.md)，每章包含目标、实现步骤、方法和验收条件。
 
-教程 01 已完成：Python 包结构、命令入口、配置读取和运行目录规范。已实现 BPR-MF 训练和离线评估；模拟 A/B 已接入 DeepSeek Evaluation Agent；Brainstorm 已接入 DeepSeek 只读调查、生成与校验；Developing 已实现候选修改、隔离检查与真实训练；候选 A/B 与 Evaluation 交接已实现；实验反馈存储与 Brainstorm 查询已实现；固定父模型的多轮编排与统一日志已实现，自动晋升和恢复尚未实现。
+教程 01 已完成：Python 包结构、命令入口、配置读取和运行目录规范。已实现 BPR-MF 训练和离线评估；模拟 A/B 已接入 DeepSeek Evaluation Agent；Brainstorm 已接入 DeepSeek 只读调查、生成与校验；Developing 已实现候选修改、隔离检查与真实训练；候选 A/B 与 Evaluation 交接已实现；实验反馈存储与 Brainstorm 查询已实现；动态基线的多轮编排、可信 KEEP 后自动升级、模型归档与统一日志已实现，中断恢复尚未实现。
 
 ## 安装与运行
 
