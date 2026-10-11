@@ -273,7 +273,7 @@ matched = output["verdict"] == rule["verdict"]
 
 成功产生 assessment.json，包含 llm_assessment、rule_decision、validation 和 final。完整闭环将来可读取这些结构化字段，把失败与结论存入实验记忆；目前没有 SQLite 或下一轮自动反馈。
 
-本章目前使用 evidence.json、trace.json、assessment.json 查看输入、响应与结果；尚未接入 Brainstorm 的统一 activity.md 日志。
+本章目前使用 evidence.json、request-NN.json、trace.json、assessment.json 查看输入、每轮完整消息、响应与结果；尚未接入 Brainstorm 的统一 activity.md 日志。
 
 ## 运行与学习验收
 

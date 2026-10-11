@@ -102,6 +102,7 @@ MovieLens 100K、BPR 矩阵分解、NDCG/Recall、DeepSeek、SQLite、CLI、Git 
 | LLM 评估 | [05-evaluation-agent.md](docs/tutorial/05-evaluation-agent.md) |
 | Brainstorm 契约、工具与生成 | [06-brainstorm.md](docs/tutorial/06-brainstorm.md) |
 | Developing 工具与候选训练 | [07-developing.md](docs/tutorial/07-developing.md) |
+| 候选 A/B 与 Evaluation 交接 | [08-candidate-evaluation.md](docs/tutorial/08-candidate-evaluation.md) |
 
 下面保留按开发依赖安排的实施计划；同一阶段的实际代码讲解集中在上述一篇文档中。未来 Developing 也按“论文机制 → 输入契约 → 工具 → 调用循环 → 验证 → 运行”写成独立章节。
 
@@ -290,7 +291,8 @@ MovieLens 100K、BPR 矩阵分解、NDCG/Recall、DeepSeek、SQLite、CLI、Git 
 - [x] 06 调查：只读代码/配置、实验报告与训练统计工具；模型驱动 JSON action 循环。
 - [ ] 06 扩展：论文检索、完整实验记忆、动态证据检索与多批残余探索。
 - [x] 07：Developing 候选工具、macOS 隔离检查/训练、DeepSeek 调用循环、每轮请求及交接。
-- [ ] 08 剩余：自定义模型 A/B 隔离加载、三个 agent 单轮闭环。
+- [x] 08 部分：自定义模型 A/B 隔离加载、Developing 到 Evaluation 交接与请求保存。
+- [ ] 08 剩余：三个 agent 单轮统一编排。
 - [ ] 09–10：记忆、多轮、预算与恢复。
 - [ ] 11：完整演示与实验复核。
 - [ ] 12：简化 SGPO。

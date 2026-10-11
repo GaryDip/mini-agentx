@@ -74,6 +74,17 @@ def validate_output(output, evidence):
         raise ValueError("缺少效果、区间、护栏、样本或流量证据")
 
 
+def interpretation_warnings(output, evidence):
+    """只检查已知的明确文字冲突，不声称能验证所有自然语言。"""
+    warnings = []
+    rationale = output["rationale"]
+    if evidence["analysis"]["checks"]["traffic_balanced"] is True and any(
+        phrase in rationale for phrase in ("存在流量不平衡", "存在流量分配不平衡", "流量检查失败")
+    ):
+        warnings.append("文字称当前流量不平衡，但结构化 traffic_balanced=true")
+    return warnings
+
+
 def evaluate_experiment(run, client):
     report = json.loads((run / "report.json").read_text())
     if report.get("simulated") is not True:
@@ -91,6 +102,7 @@ def evaluate_experiment(run, client):
     from mini_agentx.llm.client import LLMError
     output = None
     for attempt in range(client.config["max_attempts"]):
+        (destination / f"request-{attempt + 1:02}.json").write_text(json.dumps(messages, ensure_ascii=False, indent=2) + "\n")
         try:
             candidate, metadata = client.complete(messages)
         except LLMError as error:
@@ -116,11 +128,12 @@ def evaluate_experiment(run, client):
         raise ValueError(f"LLM 评估失败；脱敏诊断保存在 {destination}/trace.json")
     rule = report["analysis"]["rule_decision"]
     matched = output["verdict"] == rule["verdict"]
+    warnings = interpretation_warnings(output, evidence)
     result = {"schema_version": 1, "experiment_id": report["experiment_id"],
               "simulated": True, "llm_assessment": output, "rule_decision": rule,
-              "validation": {"citations_verified": True, "agrees_with_rule": matched},
-              "final": {"verdict": output["verdict"] if matched else "REVIEW_REQUIRED",
-                        "reason": "validated_assessment" if matched else "llm_rule_disagreement"},
+              "validation": {"citations_verified": True, "agrees_with_rule": matched, "interpretation_warnings": warnings},
+              "final": {"verdict": output["verdict"] if matched and not warnings else "REVIEW_REQUIRED",
+                        "reason": "interpretation_conflict" if warnings else ("validated_assessment" if matched else "llm_rule_disagreement")},
               "evaluation_directory": str(destination)}
     (destination / "assessment.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
     return result

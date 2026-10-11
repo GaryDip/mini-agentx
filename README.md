@@ -10,7 +10,7 @@
 
 阅读 [教程路线图 PLAN.md](PLAN.md)，每章包含目标、实现步骤、方法和验收条件。
 
-教程 01 已完成：Python 包结构、命令入口、配置读取和运行目录规范。已实现 BPR-MF 训练和离线评估；模拟 A/B 已接入 DeepSeek Evaluation Agent；Brainstorm 已接入 DeepSeek 只读调查、生成与校验；Developing 已实现候选修改、隔离检查与真实训练；完整闭环尚未实现。
+教程 01 已完成：Python 包结构、命令入口、配置读取和运行目录规范。已实现 BPR-MF 训练和离线评估；模拟 A/B 已接入 DeepSeek Evaluation Agent；Brainstorm 已接入 DeepSeek 只读调查、生成与校验；Developing 已实现候选修改、隔离检查与真实训练；候选 A/B 与 Evaluation 交接已实现；完整闭环尚未实现。
 
 ## 安装与运行
 
@@ -37,6 +37,8 @@ mini-agentx check-config --config configs/baseline.toml
 6. [Brainstorm Agent 完整教程](docs/tutorial/06-brainstorm.md)：论文对齐、任务与提案契约、工具定义、JSON 调用循环、预算、交接及日志。
 
 7. [Developing Agent](docs/tutorial/07-developing.md)：候选文件工具、隔离检查与训练、逐轮提示词和开发交接。
+
+8. [候选 A/B 与 Evaluation 交接](docs/tutorial/08-candidate-evaluation.md)：隔离加载实际模型、模拟反馈、请求日志与分歧处理。
 
 教程每章只保留一个 Markdown 文件，旧的拆分与跳转文件已删除。优先学习 agent 时，先阅读 06，再阅读 05；Developing 见第 07 章；后续闭环的实施步骤见 PLAN.md，尚未实现。
 

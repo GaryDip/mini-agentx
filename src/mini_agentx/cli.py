@@ -64,6 +64,12 @@ def main() -> None:
     developing_parser.add_argument("--proposal", required=True)
     developing_parser.add_argument("--config", default="configs/baseline.toml")
     developing_parser.add_argument("--llm-config", default="configs/developing-llm.toml")
+    candidate_parser = subparsers.add_parser("evaluate-candidate", help="候选接入模型A/B并交给Evaluation")
+    candidate_parser.add_argument("--development-run", required=True)
+    candidate_parser.add_argument("--config", default="configs/baseline.toml")
+    candidate_parser.add_argument("--ab-config", default="configs/abtest.toml")
+    candidate_parser.add_argument("--llm-config", default="configs/llm.toml")
+    candidate_parser.add_argument("--prepare-only", action="store_true", help="只运行模型A/B，不调用LLM")
     args = parser.parse_args()
     if args.command in ("check-config", "prepare-data"):
         try:
@@ -146,6 +152,20 @@ def main() -> None:
             context = json.loads(Path(context_path).read_text())
             tools = BrainstormTools(Path.cwd(), runs, context)
             result = generate_proposals(context_path, runs, DeepSeekClient(args.llm_config), tools=tools)
+        except (OSError, ValueError, KeyError) as error:
+            parser.error(str(error))
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    elif args.command == "evaluate-candidate":
+        from pathlib import Path
+        import re
+        from mini_agentx.workflow.candidate_evaluation import run_candidate_evaluation
+        from mini_agentx.llm.client import DeepSeekClient
+        try:
+            if not re.fullmatch(r"developing-[a-f0-9]{12}", args.development_run):
+                raise ValueError("开发run ID无效")
+            runs = Path(load_config(args.config)["paths"]["runs"])
+            client = None if args.prepare_only else DeepSeekClient(args.llm_config)
+            result = run_candidate_evaluation(runs / args.development_run, runs, args.ab_config, client)
         except (OSError, ValueError, KeyError) as error:
             parser.error(str(error))
         print(json.dumps(result, ensure_ascii=False, indent=2))

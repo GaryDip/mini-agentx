@@ -56,6 +56,15 @@ class EvaluationAgentTest(unittest.TestCase):
         self.assertNotIn("ctr_delta", context)
         self.assertNotIn("simulator_private", context)
 
+    def test_correct_citations_with_wrong_interpretation_require_review(self):
+        output = assessment(self.evidence)
+        output["rationale"] = "存在流量不平衡信号，需要调查。"
+        result = evaluate_experiment(self.run, FakeClient([output]))
+        self.assertTrue(result["validation"]["citations_verified"])
+        self.assertTrue(result["validation"]["agrees_with_rule"])
+        self.assertEqual(result["final"]["verdict"], "REVIEW_REQUIRED")
+        self.assertEqual(result["final"]["reason"], "interpretation_conflict")
+
     def test_disagreement_requires_review_and_tamper_is_rejected(self):
         result = evaluate_experiment(self.run, FakeClient([assessment(self.evidence, "DISCARD")]))
         self.assertEqual(result["final"]["verdict"], "REVIEW_REQUIRED")

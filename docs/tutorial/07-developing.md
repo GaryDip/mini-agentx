@@ -88,7 +88,7 @@ worker 构造一个 3 用户、5 物品的小模型，检查 score 返回 (2,)�
 
 训练结果保留模型源码摘要，另存 candidate_model.py。报告中的 validation_metrics 是最佳验证轮次，test_evaluated=false。工具返回 ndcg_delta 供解释，下降也允许开发完成。
 
-目前自定义打分结构的独立 evaluate 和模型 A/B 加载尚未接入隔离执行；这些入口会拒绝自定义源码，避免用默认模型错误解释候选权重。训练内部的验证已经使用实际候选类。只改训练参数且源码未变的权重仍兼容默认模型，但完整 A/B 编排尚未连接。
+自定义模型的 A/B 隔离加载与 Evaluation 交接已在 [第08章](08-candidate-evaluation.md) 接入。独立 evaluate 命令的自定义源码加载仍未实现；训练内验证使用实际候选模型。
 
 ### 3.4 隔离和停止条件
 
