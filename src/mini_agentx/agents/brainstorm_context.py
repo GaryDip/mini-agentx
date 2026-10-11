@@ -41,6 +41,12 @@ def build_context(baseline, task_path, runs):
                        "recall@10": report["popularity_validation_metrics"]["recall@10"]}},
         ], "avoid_set": [],
     }
+    from mini_agentx.memory.store import FeedbackStore
+    records = FeedbackStore(runs).list(context["parent_run_id"], context["dataset_version"])
+    if records:
+        context["task"]["unknowns"] = [value for value in context["task"]["unknowns"] if value != "当前没有历史候选实验记忆"]
+        context["evidence"].append({"evidence_id": "experiment-memory", "source": "experiment_kb", "status": "observed",
+                                    "facts": {"count": len(records), "scope": "same_parent_and_dataset", "tool": "list_feedback"}})
     validate_context(context)
     output = Path(runs) / ("brainstorm-input-" + uuid.uuid4().hex[:12])
     output.mkdir(parents=True)

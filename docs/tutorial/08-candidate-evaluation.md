@@ -14,7 +14,7 @@
 
 ## 1. 这一阶段要接什么
 
-输入是 Developing 的 handoff.json，输出是模型模式 A/B 报告及 Evaluation 判断。这章没有重新生成提案或训练，也没有实验记忆与自动晋升。
+输入是 Developing 的 handoff.json，输出是模型模式 A/B 报告及 Evaluation 判断。这章没有重新生成提案或训练；完成后自动保存 [第09章反馈](09-experiment-memory.md)，仍不自动晋升。
 
 对应 [AgentX §6](https://arxiv.org/html/2606.26859v2#S6) 的反馈与判断目标；模型加载、文件摘要和本地流程是教程工程选择。我们使用合成反馈替代线上观测，不复现真实部署、流量发布或业务收益。
 
@@ -131,4 +131,4 @@ python -m unittest discover -s tests -v
 
 测试包含非法排名、源码摘要不匹配、开发后文件被改、prepare-only、评估分歧和失败保留 A/B ID，以及引用正确但文字冲突。mock 只验证状态与路由；本地实际隔离加载和真实 DeepSeek 另行运行。
 
-下一步实现实验记忆：将方案、修改、指标、判决和限制保存为下一轮可查询记录。再连接完整 Brainstorm → Developing → A/B → Evaluation → 记忆循环。当前还没有自动发布、晋升或多轮恢复。
+[实验反馈与记忆](09-experiment-memory.md) 已实现，保存方案、修改、指标、判决和限制，供下一轮查询。再连接完整 Brainstorm → Developing → A/B → Evaluation → 记忆循环。当前还没有自动发布、晋升或多轮恢复。

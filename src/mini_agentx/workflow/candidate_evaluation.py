@@ -40,6 +40,17 @@ def run_candidate_evaluation(development, runs, ab_config, client=None):
              'proposal_id': handoff['proposal_id'], 'simulated': True, 'promoted': False}
     def save():
         (directory / 'status.json').write_text(json.dumps(state, ensure_ascii=False, indent=2))
+    def store_feedback():
+        from mini_agentx.memory.store import import_feedback
+        import sqlite3
+        try:
+            feedback = import_feedback(runs, directory.name)
+            state['feedback_id'] = feedback['feedback_id']
+            activity.record('实验反馈已保存', result={'feedback_id': feedback['feedback_id'], 'final_verdict': feedback['final_verdict']})
+        except (OSError, ValueError, KeyError, TypeError, sqlite3.Error) as error:
+            state['feedback_error'] = str(error)
+            activity.record('反馈保存失败，实验结果仍保留', result={'error': str(error)})
+        save()
     save()
     activity.record('核对开发交接完成', result=state.copy())
     try:
@@ -62,9 +73,11 @@ def run_candidate_evaluation(development, runs, ab_config, client=None):
         state['error'] = str(error)
         activity.record('阶段失败', result={'error': str(error)})
         save()
+        store_feedback()
         raise ValueError(f'候选评估失败，见 {directory}/activity.md：{error}') from None
     state['directory'] = str(directory)
     state['activity_log'] = str(directory / 'activity.md')
     save()
+    store_feedback()
     (directory / 'handoff.json').write_text(json.dumps(state, ensure_ascii=False, indent=2))
     return state

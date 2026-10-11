@@ -52,9 +52,11 @@ class HandoffTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             development = self.fixture(root)
-            with patch('mini_agentx.workflow.candidate_evaluation.load_ab_config', return_value={}), patch('mini_agentx.workflow.candidate_evaluation.simulate', return_value=report) as simulator:
+            with patch('mini_agentx.workflow.candidate_evaluation.load_ab_config', return_value={}), patch('mini_agentx.workflow.candidate_evaluation.simulate', return_value=report) as simulator, patch('mini_agentx.memory.store.import_feedback', return_value={'feedback_id': 'feedback-123456789abc', 'final_verdict': 'NOT_EVALUATED'}) as memory:
                 result = run_candidate_evaluation(development, root, 'unused')
                 self.assertEqual(result['status'], 'ab_completed')
+                self.assertEqual(result['feedback_id'], 'feedback-123456789abc')
+                self.assertEqual(memory.call_count, 1)
                 self.assertEqual(simulator.call_args.args[1], 'null')
                 with patch('mini_agentx.workflow.candidate_evaluation.evaluate_experiment', return_value={'final': {'verdict': 'REVIEW_REQUIRED'}}):
                     result = run_candidate_evaluation(development, root, 'unused', object())

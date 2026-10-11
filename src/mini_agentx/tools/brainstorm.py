@@ -20,6 +20,8 @@ class BrainstormTools:
         "read_file": {"arguments": {"path": "白名单中的项目相对路径"}, "description": "读取代码或配置，不读取其他文件"},
         "list_experiments": {"arguments": {}, "description": "列出真实训练与模型模式模拟 A/B 的摘要，排除注入场景"},
         "read_experiment": {"arguments": {"run_id": "已列出的实验 ID"}, "description": "读取验证指标或模型模式 A/B 观测，不读取测试结果及模拟真值"},
+        "list_feedback": {"arguments": {}, "description": "列出当前父实验和数据版本的反馈摘要，包括失败与待复查记录"},
+        "read_feedback": {"arguments": {"feedback_id": "反馈ID"}, "description": "读取观测、方案与有限结论；不回传未经验证的LLM解释"},
         "training_data_summary": {"arguments": {}, "description": "统计父实验训练集的用户交互与物品流行度，无留出标签"},
     }
 
@@ -27,6 +29,7 @@ class BrainstormTools:
         self.root = Path(root).resolve()
         self.runs = Path(runs).resolve()
         self.parent = context["parent_run_id"]
+        self.dataset_version = context.get("dataset_version")
 
     def safe_file(self, base, relative):
         target = base / relative
@@ -66,6 +69,15 @@ class BrainstormTools:
             raise ValueError("未知或禁止的工具")
         if not isinstance(arguments, dict) or set(arguments) != set(self.SPECS[name]["arguments"]):
             raise ValueError("工具参数字段不符合定义")
+        if name in ("list_feedback", "read_feedback"):
+            from mini_agentx.memory.store import FeedbackStore
+            store = FeedbackStore(self.runs)
+            if name == "read_feedback":
+                return "experiment_kb", store.read(arguments["feedback_id"], self.parent, self.dataset_version)
+            records = store.list(self.parent, self.dataset_version)
+            summaries = [{key: record[key] for key in ("feedback_id", "mechanism_key", "proposal_id", "final_verdict", "conclusions")}
+                         for record in records]
+            return "experiment_kb", {"feedback": summaries, "count": len(summaries)}
         if name == "list_files":
             return "system_kb", {"paths": list(self.FILES)}
         if name == "read_file":

@@ -43,7 +43,7 @@ Brainstorm Agent 的工作是：了解现有推荐系统，查看实验和数据
 
 ## 2. Agent 需要哪些工具
 
-工具就是 Python 能执行的函数。LLM 提供工具名和参数，Python 执行后返回结果。我们的五个工具都通过 `BrainstormTools.execute(name, arguments)` 调用。
+工具就是 Python 能执行的函数。LLM 提供工具名和参数，Python 执行后返回结果。我们的工具都通过 `BrainstormTools.execute(name, arguments)` 调用。
 
 ### 2.1 list_files：有哪些文件可以读
 
@@ -103,7 +103,7 @@ tools.execute("list_experiments", {})
 
 只返回最多 30 项，按文件夹名字排序后取最后 30 项，**不是按运行时间选最近 30 次**。当前支持 baseline-* 训练实验和模型模式 ab-* 实验；人为设置“改善/恶化”的模拟场景不开放给它。
 
-这个列表还不是完整的实验记忆。失败方案检索和 SQLite 记忆尚未实现。
+这个列表只查实验报告；结构化反馈与 SQLite 查询使用第09章新增的反馈工具，尚未覆盖所有早期失败类型。
 
 ### 2.4 read_experiment：查看一个实验的结果
 
@@ -150,6 +150,10 @@ tools.execute("training_data_summary", {})
 | items_with_at_most_5_interactions | 交互不超过五次的物品数 |
 
 执行前核对训练文件摘要和数据版本。它不返回原始用户记录，不读验证或测试标签。统计反映数据分布，不能单凭这些数字断言某个改动一定有效。
+
+### 2.6 反馈查询工具
+
+[list_feedback 和 read_feedback](09-experiment-memory.md#5-给-brainstorm-两个工具) 已实现，分别列出相关反馈摘要、读取一条反馈详情。查询固定当前父实验和数据版本；观测与复查状态回传，未经验证的原始LLM解释不回传。下面历史五轮示例在加入记忆之前运行，新运行还会出现这些查询。
 
 ## 3. 先在 Python 中调用工具，再交给模型
 
@@ -263,7 +267,7 @@ validation 应定义可观测的机制、同数据同种子的父模型对照以
 再 training_data_summary 查询训练统计；这些成功后才允许 propose。
 ```
 
-后面还包含公开 reason、工具文本按数据处理、失败不当作事实、预算有限等说明，并通过 `json.dumps(tools.SPECS)` 追加五个工具的定义。完整合成文本可以在运行 trace.json 的 system_prompt 中看到。
+后面还包含公开 reason、工具文本按数据处理、失败不当作事实、预算有限等说明，并通过 `json.dumps(tools.SPECS)` 追加工具定义。完整合成文本可以在运行 trace.json 的 system_prompt 中看到。
 
 **这里必须看清当前自主程度：** 前三个调查是我们在 prompt 中直接要求的，并非模型完全自由地发现应该调查哪里。代码的 inspected 检查只要求三项成功，不锁定顺序。模型自己生成调用参数与公开理由，并可选择额外调查，例如读取训练器或实验列表。因而目前是带最低调查要求的 agent，而不是完全开放的探索器。这也是为什么这次前三个动作很稳定。
 
@@ -272,7 +276,7 @@ validation 应定义可观测的机制、同数据同种子的父模型对照以
 第一次调用 `client.complete(messages)` 时，messages 只有两条：
 
 ```text
-[0] system：SYSTEM_PROMPT + tool_prompt + 五个工具定义
+[0] system：SYSTEM_PROMPT + tool_prompt + 工具定义
 [1] user：JSON(context_initial)
 ```
 
@@ -441,7 +445,7 @@ action=propose 后，程序先检查模型代码、父实验和训练统计是�
 
 ### 5.5 什么时候结束
 
-默认最多 8 次模型请求、6 次工具请求、2 次无效输出。成功交接结束；达到预算或无法恢复的错误也结束，并保存失败记录。每次 API 网络超时为 45 秒。次数在 configs/brainstorm-llm.toml 中设置。
+默认最多 10 次模型请求、8 次工具请求、2 次无效输出。成功交接结束；达到预算或无法恢复的错误也结束，并保存失败记录。每次 API 网络超时为 45 秒。次数在 configs/brainstorm-llm.toml 中设置。
 
 Brainstorm 只读和提方案，60 秒候选训练预算目前只是任务中的要求，后续 Developing 的训练工具才负责执行。
 
@@ -481,4 +485,4 @@ python -m unittest discover -s tests -p 'test_brainstorm*.py' -v
 
 这个工具尚未实现。你需要：在 SPECS 写用途和参数，在 execute 写读取与计算，返回 source/facts，最后写测试核对数值与读取范围。只要遵守现有返回格式，不需要在 generate_proposals 增加同名分支，它已经通过 execute 调用工具。
 
-[07：Developing](07-developing.md) 已实现读取 proposal.json、修改独立候选文件和真实训练。完整实验记忆、论文检索、多批探索和自动闭环还没有实现；[05：Evaluation Agent](05-evaluation-agent.md) 说明实验结果怎样交给 LLM 判断。
+[07：Developing](07-developing.md) 已实现读取 proposal.json、修改独立候选文件和真实训练。结构化反馈与查询见 [第09章](09-experiment-memory.md)；跨父模型检索、论文检索、多批探索和自动闭环还没有实现；[05：Evaluation Agent](05-evaluation-agent.md) 说明实验结果怎样交给 LLM 判断。

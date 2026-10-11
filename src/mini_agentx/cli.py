@@ -70,6 +70,13 @@ def main() -> None:
     candidate_parser.add_argument("--ab-config", default="configs/abtest.toml")
     candidate_parser.add_argument("--llm-config", default="configs/llm.toml")
     candidate_parser.add_argument("--prepare-only", action="store_true", help="只运行模型A/B，不调用LLM")
+    memory_parser = subparsers.add_parser("remember", help="导入或更新已有候选评估反馈")
+    memory_parser.add_argument("--evaluation-run", required=True)
+    memory_parser.add_argument("--config", default="configs/baseline.toml")
+    feedback_parser = subparsers.add_parser("feedback", help="读取当前父实验的数据版本下的实验反馈")
+    feedback_parser.add_argument("--baseline-run", required=True)
+    feedback_parser.add_argument("--feedback-id")
+    feedback_parser.add_argument("--config", default="configs/baseline.toml")
     args = parser.parse_args()
     if args.command in ("check-config", "prepare-data"):
         try:
@@ -152,6 +159,23 @@ def main() -> None:
             context = json.loads(Path(context_path).read_text())
             tools = BrainstormTools(Path.cwd(), runs, context)
             result = generate_proposals(context_path, runs, DeepSeekClient(args.llm_config), tools=tools)
+        except (OSError, ValueError, KeyError) as error:
+            parser.error(str(error))
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    elif args.command in ("remember", "feedback"):
+        from pathlib import Path
+        import re
+        from mini_agentx.memory.store import FeedbackStore, import_feedback
+        try:
+            runs = Path(load_config(args.config)["paths"]["runs"])
+            if args.command == "remember":
+                result = import_feedback(runs, args.evaluation_run)
+            else:
+                if not re.fullmatch(r"baseline-[a-f0-9]{12}", args.baseline_run):
+                    raise ValueError("父实验ID无效")
+                parent = json.loads((runs / args.baseline_run / "report.json").read_text())
+                store = FeedbackStore(runs)
+                result = store.read(args.feedback_id, args.baseline_run, parent["dataset_version"]) if args.feedback_id else store.list(args.baseline_run, parent["dataset_version"])
         except (OSError, ValueError, KeyError) as error:
             parser.error(str(error))
         print(json.dumps(result, ensure_ascii=False, indent=2))
