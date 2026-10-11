@@ -36,7 +36,7 @@ mini-agentx check-config --config configs/baseline.toml
 5. [Evaluation Agent](docs/tutorial/05-evaluation-agent.md)：从 A/B 证据到 LLM 判断、事实校验与决策。
 6. [Brainstorm Agent 完整教程](docs/tutorial/06-brainstorm.md)：论文对齐、任务与提案契约、工具定义、JSON 调用循环、预算、交接及日志。
 
-每个已实现阶段集中在一篇教程。优先学习 agent 时，先阅读 06，再阅读 05；Developing 及后续闭环的实施步骤见 PLAN.md，尚未实现。
+教程每章只保留一个 Markdown 文件，旧的拆分与跳转文件已删除。优先学习 agent 时，先阅读 06，再阅读 05；Developing 及后续闭环的实施步骤见 PLAN.md，尚未实现。
 
 ## 复现范围
 

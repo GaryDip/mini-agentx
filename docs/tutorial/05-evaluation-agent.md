@@ -129,7 +129,7 @@ mini-agentx ab-evaluate --run <experiment_id>
 结构化输出包含 simulated、verdict、rationale、citations、risks、next_steps、caveats。
 每条 citation 必须引用真实点分隔路径及对应值。必须覆盖效果、置信区间、护栏、样本量和流量检查。数字引用不匹配或缺字段触发有限修复。
 
-程序能验证结构化引用，**不能保证自由文本解释中的每个推断都正确**。解释仍需审阅，不应把 LLM 对机制的猜测记为已证实归因。
+程序能验证结构化引用，**不能保证自由文本解释中的每个推断都正确**。解释仍需审阅，不应把 LLM 对机制的猜测记为已证实原因分析。
 
 LLM 判决与规则参照一致时得到对应 final 判决；分歧标记 REVIEW_REQUIRED，不自动发布、回滚或扩展流量。规则参照来自上一章固定政策，不是人类标签，也不能用匹配率证明模型在真实业务中可靠。
 
@@ -137,7 +137,7 @@ LLM 判决与规则参照一致时得到对应 final 判决；分歧标记 REVIE
 
 每次调用独立保存在 `runs/<ab-id>/evaluations/<evaluation-id>/`：
 
-- evidence.json：实际发送的盲评证据。
+- evidence.json：实际发送的去掉规则答案后的证据。
 - trace.json：提示词、调用尝试、响应、usage、延迟或脱敏错误。
 - assessment.json：LLM 判断、引用校验、规则对照与最终状态；仅成功评估产生。
 
@@ -250,7 +250,7 @@ matched = output["verdict"] == rule["verdict"]
 
 试着在阅读现有判决分歧测试时追踪 matched=False，确认程序不会直接采用模型的 KEEP。
 
-### 第六步：把判断保存成下游资产
+### 第六步：把判断保存成下游记录
 
 成功产生 assessment.json，包含 llm_assessment、rule_decision、validation 和 final。完整闭环将来可读取这些结构化字段，把失败与结论存入实验记忆；目前没有 SQLite 或下一轮自动反馈。
 
@@ -267,7 +267,7 @@ python -m unittest discover -s tests -v
 
 离线测试覆盖幻觉数值拒绝、有限修复、上下文排除规则答案与模拟真值、判决分歧转复查、事件被篡改时不调用模型。测试使用 mock；下面的真实 API 记录单独列出，两者不混用。
 
-下一步是 Developing 的代码与训练工具，再由编排器连接 Brainstorm → Developing → Evaluation。未来还需要固定候选晋升协议、诊断工具和实验记忆；当前不应声称三个 agent 已经组成完整闭环。
+下一步是 Developing 的代码与训练工具，再由编排器连接 Brainstorm → Developing → Evaluation。未来还需要固定候选选用协议、诊断工具和实验记忆；当前不应声称三个 agent 已经组成完整闭环。
 
 ## 真实 API 验证记录
 
