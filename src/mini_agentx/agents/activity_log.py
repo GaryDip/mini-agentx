@@ -6,11 +6,11 @@ from pathlib import Path
 
 
 class ActivityLog:
-    def __init__(self, directory):
+    def __init__(self, directory, agent="Brainstorm"):
         self.directory = Path(directory)
         self.sequence = 0
         (self.directory / "activity.md").write_text(
-            "# Brainstorm 行动日志\n\n"
+            f"# {agent} 行动日志\n\n"
             "按时间顺序记录动作、模型公开说明、工具观测与程序校验。"
             "说明不是模型内部思维链，推测也不是已验证事实。时间为 Asia/Singapore（UTC+08）。\n\n"
         )

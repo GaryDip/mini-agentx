@@ -60,6 +60,10 @@ def main() -> None:
     brainstorm_parser.add_argument("--task", default="configs/brainstorm-task.json")
     brainstorm_parser.add_argument("--config", default="configs/baseline.toml")
     brainstorm_parser.add_argument("--llm-config", default="configs/brainstorm-llm.toml")
+    developing_parser = subparsers.add_parser("develop", help="实现选中提案并真实训练候选")
+    developing_parser.add_argument("--proposal", required=True)
+    developing_parser.add_argument("--config", default="configs/baseline.toml")
+    developing_parser.add_argument("--llm-config", default="configs/developing-llm.toml")
     args = parser.parse_args()
     if args.command in ("check-config", "prepare-data"):
         try:
@@ -142,6 +146,18 @@ def main() -> None:
             context = json.loads(Path(context_path).read_text())
             tools = BrainstormTools(Path.cwd(), runs, context)
             result = generate_proposals(context_path, runs, DeepSeekClient(args.llm_config), tools=tools)
+        except (OSError, ValueError, KeyError) as error:
+            parser.error(str(error))
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    elif args.command == "develop":
+        from pathlib import Path
+        from mini_agentx.tools.developing import DevelopingTools
+        from mini_agentx.agents.developing import develop
+        from mini_agentx.llm.client import DeepSeekClient
+        try:
+            runs = Path(load_config(args.config)["paths"]["runs"])
+            tools = DevelopingTools(Path.cwd(), runs, args.proposal)
+            result = develop(tools, DeepSeekClient(args.llm_config))
         except (OSError, ValueError, KeyError) as error:
             parser.error(str(error))
         print(json.dumps(result, ensure_ascii=False, indent=2))

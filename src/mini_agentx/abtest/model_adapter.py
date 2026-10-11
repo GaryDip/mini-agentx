@@ -13,6 +13,9 @@ from mini_agentx.recommender.model import MatrixFactorization
 
 def model_feedback(model_a, model_b, seed):
     metadata = [json.loads((Path(run) / "report.json").read_text()) for run in (model_a, model_b)]
+    source_hash = hashlib.sha256(Path(__file__).parents[1].joinpath("recommender/model.py").read_bytes()).hexdigest()
+    if any(info.get("candidate_source") and info["model_source_sha256"] != source_hash for info in metadata):
+        raise ValueError("自定义模型的A/B隔离加载尚未实现；不能使用默认模型冒充候选")
     if metadata[0]["dataset_version"] != metadata[1]["dataset_version"]:
         raise ValueError("A/B 模型数据版本不同")
     manifest, splits = load_data(Path(metadata[0]["data_directory"]), include_validation=False)

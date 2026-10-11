@@ -49,6 +49,8 @@ def ranking_metrics(scores, targets, seen, k=10):
 def evaluate_run(run: Path, split="validation"):
     from .model import MatrixFactorization
     metadata = json.loads((run / "report.json").read_text())
+    if metadata.get("candidate_source") and metadata["model_source_sha256"] != hashlib.sha256(Path(__file__).with_name("model.py").read_bytes()).hexdigest():
+        raise ValueError("自定义候选模型已有训练内验证；独立评估尚未接入隔离模型加载")
     manifest, splits = load_data(Path(metadata["data_directory"]), include_test=split == "test")
     if manifest["dataset_version"] != metadata["dataset_version"]:
         raise ValueError("训练和评估数据版本不一致")

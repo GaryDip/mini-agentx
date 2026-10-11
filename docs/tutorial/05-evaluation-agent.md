@@ -286,7 +286,7 @@ python -m unittest discover -s tests -v
 
 离线测试覆盖幻觉数值拒绝、有限修复、上下文排除规则答案与模拟真值、判决分歧转复查、事件被篡改时不调用模型。测试使用 mock；下面的真实 API 记录单独列出，两者不混用。
 
-下一步是 Developing 的代码与训练工具，再由编排器连接 Brainstorm → Developing → Evaluation。未来还需要固定候选选用协议、诊断工具和实验记忆；当前不应声称三个 agent 已经组成完整闭环。
+[Developing 的代码与训练工具](07-developing.md) 已实现，下一步由编排器连接 Brainstorm → Developing → Evaluation。未来还需要固定候选选用协议、诊断工具和实验记忆；当前不应声称三个 agent 已经组成完整闭环。
 
 ## 真实 API 验证记录
 

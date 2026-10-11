@@ -22,7 +22,7 @@
 
 Brainstorm Agent 的工作是：了解现有推荐系统，查看实验和数据，再提出值得尝试的改进方案。这一章从它需要的组件开始讲，然后对照仓库代码，把一次工具调用接起来。
 
-它现在可以调查和提出方案，还不会修改模型或训练候选。修改代码和训练是下一章 Developing Agent 的工作。
+它现在可以调查和提出方案，还不会修改模型或训练候选。修改代码和训练见 [下一章 Developing Agent](07-developing.md)。
 
 ## 1. 一个 Brainstorm Agent 需要什么
 
@@ -481,4 +481,4 @@ python -m unittest discover -s tests -p 'test_brainstorm*.py' -v
 
 这个工具尚未实现。你需要：在 SPECS 写用途和参数，在 execute 写读取与计算，返回 source/facts，最后写测试核对数值与读取范围。只要遵守现有返回格式，不需要在 generate_proposals 增加同名分支，它已经通过 execute 调用工具。
 
-Developing、完整实验记忆、论文检索和多批探索还没有实现。下一步将让 Developing 读取 proposal.json，修改独立候选文件并运行训练；[05：Evaluation Agent](05-evaluation-agent.md) 说明实验结果怎样交给 LLM 判断。
+[07：Developing](07-developing.md) 已实现读取 proposal.json、修改独立候选文件和真实训练。完整实验记忆、论文检索、多批探索和自动闭环还没有实现；[05：Evaluation Agent](05-evaluation-agent.md) 说明实验结果怎样交给 LLM 判断。

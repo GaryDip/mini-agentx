@@ -13,7 +13,7 @@ from .evaluate import load_data, ranking_metrics
 from .model import MatrixFactorization
 
 
-def train(config):
+def train(config, model_class=None, model_source=None):
     settings = config["training"]
     for name in ("dimensions", "epochs", "batch_size", "threads"):
         if type(settings[name]) is not int or settings[name] <= 0:
@@ -28,7 +28,7 @@ def train(config):
     rng = random.Random(config["seed"])
     data = Path(config["paths"]["processed_data"]) / "movielens-100k-v1"
     manifest, splits = load_data(data)
-    model = MatrixFactorization(manifest["users"], manifest["items"], settings["dimensions"])
+    model = (model_class or MatrixFactorization)(manifest["users"], manifest["items"], settings["dimensions"])
     optimizer = torch.optim.Adam(model.parameters(), lr=settings["learning_rate"])
     positives = [set() for _ in range(manifest["users"])]
     for user, item in splits["train"]:
@@ -83,7 +83,7 @@ def train(config):
         "training_seconds": time.monotonic() - started,
         "torch_version": torch.__version__, "device": "cpu",
         "checkpoint_sha256": hashlib.sha256((run / "model.pt").read_bytes()).hexdigest(),
-        "model_source_sha256": hashlib.sha256(Path(__file__).with_name("model.py").read_bytes()).hexdigest(),
+        "model_source_sha256": hashlib.sha256(Path(model_source or Path(__file__).with_name("model.py")).read_bytes()).hexdigest(),
         "test_evaluated": False,
     }
     (run / "report.json").write_text(json.dumps(report, indent=2) + "\n")

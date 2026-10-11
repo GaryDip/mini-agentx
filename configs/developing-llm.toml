@@ -1,0 +1,10 @@
+[llm]
+base_url = "https://api.deepseek.com"
+model = "deepseek-flash"
+timeout_seconds = 45
+max_tokens = 5500
+max_attempts = 2
+
+[workflow]
+max_model_calls = 12
+max_tool_calls = 10
