@@ -304,3 +304,6 @@ MovieLens 100K、BPR 矩阵分解、NDCG/Recall、DeepSeek、SQLite、CLI、Git 
 ## 协作节奏
 
 一次推进一个教程章节。每章解释设计、实现代码、运行必要验证、写教程和真实结果、提交 Git 并更新进度。教程 01 完成后，先完成 02–04 的最小数据与真实基线，再学习 Brainstorm 的契约与证据上下文，结合 05 接入 DeepSeek。API 模型名、预算和代码隔离方式在对应章节落实。
+
+- [x] 实验去重：相同源码、训练配置、种子和数据版本的已完成训练不重跑；支持训练 seed 稳定性复查。
+- [x] 扩大训练策略接口：bpr/hinge/bce 损失，uniform/popularity/hard 负采样，保留固定数据与评估协议。

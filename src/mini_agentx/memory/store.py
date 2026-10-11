@@ -138,6 +138,9 @@ def import_feedback(runs, source_run):
     metric = report['validation_metrics']['ndcg@10']
     parent_metric = parent['validation_metrics']['ndcg@10']
     observed = {'parent_ndcg': parent_metric, 'candidate_ndcg': metric, 'ndcg_delta': metric - parent_metric,
+                'training_seed': report['config']['training'].get('seed', report['config'].get('seed')),
+                'model_source_sha256': report['model_source_sha256'],
+                'training_strategy': report.get('training_strategy', {'loss': 'bpr', 'negative_sampling': 'uniform'}),
                 'parent_recall': parent['validation_metrics']['recall@10'],
                 'candidate_recall': report['validation_metrics']['recall@10'],
                 'training_seconds': report['training_seconds'], 'training_config': report['config']['training']}

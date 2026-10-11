@@ -115,7 +115,7 @@ class Proposal:
             text(change["description"], "description")
         validation = value["validation"]
         require_fields(validation, ("metric", "expected_direction", "comparison", "observables", "falsification"), "validation")
-        if validation["metric"] != task.primary_metric or validation["comparison"] != "same_data_and_seed_against_parent":
+        if validation["metric"] != task.primary_metric or validation["comparison"] not in ("same_data_and_seed_against_parent", "same_data_different_seed_stability"):
             raise ValueError("必须保持评估指标、数据及种子一致")
         if validation["expected_direction"] != "increase":
             raise ValueError("首版提案目标是提高主指标，不能保证提升")

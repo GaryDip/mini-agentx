@@ -11,6 +11,7 @@ from torch.nn import functional as F
 
 from .evaluate import load_data, ranking_metrics
 from .model import MatrixFactorization
+from .strategy import options, objective, sample_negatives, experiment_signature
 
 
 def train(config, model_class=None, model_source=None):
@@ -22,10 +23,11 @@ def train(config, model_class=None, model_source=None):
         value = settings[name]
         if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
             raise ValueError(f"training.{name} 必须为非负有限数")
+    strategy = options(config)
     torch.set_num_threads(settings["threads"])
     torch.use_deterministic_algorithms(True)
-    torch.manual_seed(config["seed"])
-    rng = random.Random(config["seed"])
+    torch.manual_seed(strategy["seed"])
+    rng = random.Random(strategy["seed"])
     data = Path(config["paths"]["processed_data"]) / "movielens-100k-v1"
     manifest, splits = load_data(data)
     model = (model_class or MatrixFactorization)(manifest["users"], manifest["items"], settings["dimensions"])
@@ -56,8 +58,8 @@ def train(config, model_class=None, model_source=None):
             batch = [splits["train"][index] for index in order[offset:offset + settings["batch_size"]]]
             users = torch.tensor([row[0] for row in batch])
             items = torch.tensor([row[1] for row in batch])
-            sampled = torch.tensor([rng.choice(negatives[user]) for user, _ in batch])
-            loss = F.softplus(model.score(users, sampled) - model.score(users, items)).mean()
+            sampled = sample_negatives(model, users, negatives, popularity, rng, strategy["negative_sampling"])
+            loss = objective(model.score(users, items), model.score(users, sampled), strategy["loss"])
             regularizer = (model.users(users).square().sum() + model.items(items).square().sum()
                            + model.items(sampled).square().sum()) / len(batch)
             loss = loss + settings["l2"] * regularizer
@@ -86,6 +88,8 @@ def train(config, model_class=None, model_source=None):
         "model_source_sha256": hashlib.sha256(Path(model_source or Path(__file__).with_name("model.py")).read_bytes()).hexdigest(),
         "test_evaluated": False,
     }
+    report["training_strategy"] = strategy
+    report["experiment_signature"] = experiment_signature(report["model_source_sha256"], config, manifest["dataset_version"])
     (run / "report.json").write_text(json.dumps(report, indent=2) + "\n")
     return {"run_id": run.name, "best_epoch": best_epoch,
             "validation_metrics": report["validation_metrics"],

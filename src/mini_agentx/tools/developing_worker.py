@@ -31,6 +31,13 @@ def main():
             raise ValueError("score 与 score_all 不一致")
         # Fixed trainer needs both embedding lookups for regularization.
         loss = score.sum() + model.users(users).square().sum() + model.items(items).square().sum()
+        from mini_agentx.recommender.strategy import options, objective, sample_negatives
+        import random
+        strategy = options(config)
+        negatives = sample_negatives(model, users, [[0, 3, 4], [0, 3, 4], [0, 3, 4]], torch.ones(5), random.Random(strategy["seed"]), strategy["negative_sampling"])
+        loss = objective(score, model.score(users, negatives), strategy["loss"]) + loss * 0.001
+        if loss.ndim != 0 or not torch.isfinite(loss):
+            raise ValueError("策略损失必须为有限标量")
         loss.backward()
         result = {"valid": True, "score_shape": list(score.shape), "score_all_shape": list(all_scores.shape)}
     else:

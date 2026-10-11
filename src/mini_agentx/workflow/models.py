@@ -22,7 +22,7 @@ def archive_model(root, runs, source, destination):
     # 所有归档都自带代码，读取时不依赖项目当前代码。
     report['candidate_source'] = 'candidate_model.py'
     (destination / 'report.json').write_text(json.dumps(report, ensure_ascii=False, indent=2))
-    (destination / 'training.toml').write_text('[training]\n' + ''.join(f'{key} = {value}\n' for key, value in report['config']['training'].items()))
+    (destination / 'training.toml').write_text('[training]\n' + ''.join(f'{key} = {json.dumps(value)}\n' for key, value in report['config']['training'].items()))
     return report
 
 

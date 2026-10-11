@@ -56,6 +56,9 @@ class BrainstormTools:
                     "history": [{key: row[key] for key in ("epoch", "loss", "ndcg@10", "recall@10", "evaluated_users", "candidate_items") if key in row}
                                 for row in report["history"]],
                     "training_seconds": report["training_seconds"],
+                    "model_source_sha256": report["model_source_sha256"],
+                    "training_seed": report["config"]["training"].get("seed", report["config"]["seed"]),
+                    "training_strategy": report.get("training_strategy", {"loss": "bpr", "negative_sampling": "uniform"}),
                     "training_config": {key: report["config"]["training"][key] for key in
                                         ("dimensions", "learning_rate", "batch_size", "epochs", "l2", "threads")}}
         if report.get("mode") != "models" or report.get("simulated") is not True:

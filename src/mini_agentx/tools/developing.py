@@ -58,8 +58,10 @@ class DevelopingTools:
         self.directory.mkdir(parents=True)
         self.candidate = self.directory / "candidate"
         self.candidate.mkdir()
-        settings = self.parent["config"]["training"]
-        config_text = "[training]\n" + "".join(f"{key} = {value}\n" for key, value in settings.items())
+        settings = dict(self.parent["config"]["training"])
+        from mini_agentx.recommender.strategy import options
+        settings.update(options(self.parent["config"]))
+        config_text = "[training]\n" + "".join(f"{key} = {json.dumps(value)}\n" for key, value in settings.items())
         self.original = {"model.py": source.read_text(), "training.toml": config_text}
         for name, content in self.original.items():
             (self.candidate / name).write_text(content)
@@ -81,8 +83,8 @@ class DevelopingTools:
 
     def settings(self):
         value = tomllib.loads(self.path("training.toml").read_text())
-        if set(value) != {"training"} or set(value["training"]) != set(self.parent["config"]["training"]):
-            raise ValueError("只支持现有 training 字段，不能改种子或路径")
+        if set(value) != {"training"} or set(value["training"]) != set(self.parent["config"]["training"]) | {"seed", "loss", "negative_sampling"}:
+            raise ValueError("training 字段必须包含原有参数、seed、loss、negative_sampling，不能改路径")
         settings = value["training"]
         limits = {"dimensions": 256, "epochs": 100, "batch_size": 8192, "threads": 4}
         for key, limit in limits.items():
@@ -91,8 +93,26 @@ class DevelopingTools:
         for key in ("learning_rate", "l2"):
             if type(settings[key]) not in (int, float) or not math.isfinite(settings[key]) or not 0 <= settings[key] <= 1:
                 raise ValueError(f"{key} 必须是 0..1 的有限数")
+        from mini_agentx.recommender.strategy import options
+        options({"seed": self.parent["config"]["seed"], "training": settings})
         ast.parse(self.path("model.py").read_text())
         return settings
+
+    def reject_duplicate(self):
+        from mini_agentx.recommender.strategy import experiment_signature
+        config = dict(self.parent['config'], training=self.settings())
+        signature = experiment_signature(digest(self.path('model.py')), config, self.parent['dataset_version'])
+        paths = [*self.runs.glob('baseline-*/report.json'), *self.runs.glob('developing-*/training/baseline-*/report.json')]
+        for path in paths:
+            if path.is_symlink() or any(p.is_symlink() for p in path.parents if p != self.runs):
+                continue
+            try:
+                report = json.loads(path.read_text())
+                previous = experiment_signature(report['model_source_sha256'], report['config'], report['dataset_version'])
+                if previous == signature:
+                    raise ValueError(f'重复实验：已有完成训练 {report["run_id"]}，同源码、配置、种子和数据不重跑。验证稳定性请仅更换 seed；新实验请修改实际机制。')
+            except (OSError, KeyError, json.JSONDecodeError):
+                continue
 
     def run_worker(self, mode):
         if sys.platform != "darwin" or not Path("/usr/bin/sandbox-exec").exists():
@@ -165,6 +185,7 @@ class DevelopingTools:
             self.trained = self.report = None
             if self.checked != self.fingerprint():
                 raise ValueError("当前文件尚未通过检查，请先 check_candidate")
+            self.reject_duplicate()
             self.report = self.run_worker("train")
             if self.report["dataset_version"] != self.parent["dataset_version"]:
                 self.report = None

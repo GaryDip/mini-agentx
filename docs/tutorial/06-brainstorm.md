@@ -153,7 +153,7 @@ tools.execute("training_data_summary", {})
 
 ### 2.6 反馈查询工具
 
-[list_feedback 和 read_feedback](09-experiment-memory.md#5-给-brainstorm-两个工具) 已实现，分别列出相关反馈摘要、读取一条反馈详情。查询固定当前父实验和数据版本；观测与复查状态回传，未经验证的原始LLM解释不回传。下面历史五轮示例在加入记忆之前运行，新运行还会出现这些查询。
+[list_feedback 和 read_feedback](09-experiment-memory.md#5-给-brainstorm-两个工具) 已实现，分别列出相关反馈摘要、读取一条反馈详情。查询当前基线链和同一数据版本；观测与复查状态回传，未经验证的原始LLM解释不回传。下面历史五轮示例在加入记忆之前运行，新运行还会出现这些查询。
 
 ## 3. 先在 Python 中调用工具，再交给模型
 
@@ -225,17 +225,18 @@ PYCODE
 遵守 allowed_files、constraints、forbidden_changes 和 avoid_set。
 只修改独立候选目录中的 model.py 或 training.toml，不能改评估器、数据、模拟器或编排程序。
 严格依据 system-model 的 change_surface 和 frozen_training_logic：model.py 仅承载模型表示与打分，
-不能在 model.py 修改训练器的 BPR 损失或负采样。training.toml 只支持上下文列出的现有数值参数，
-不能通过新增参数假装实现训练算法。当前不可实施的损失/采样方案必须 backlog 且 changes=[]。
+损失与负采样通过 training.toml 选择已实现接口：loss=bpr/hinge/bce，negative_sampling=uniform/popularity/hard。
+稳定性复查必须明确仅更换训练 seed；同源码、配置、种子和数据的已完成实验不可重复。新实验必须指出实际机制差异。
+必须用 list_experiments/read_experiment 或实验记忆核对历史配置、源码摘要、训练种子，不能将同种子重跑解释为稳定性验证。
 生成 task.candidate_count 个不同机制候选。ready 可直接实施且 probes=[]；
 probe_first 必须给出阻塞性 probes；backlog 保存当前条件不具备的方向。
 证据不足就标记 probe_first/backlog，不强行制造 ready。
 priority 为唯一正整数，越小越优先。每个候选只验证一个主要机制。
-evidence_refs 只能引用 context.evidence 里的 evidence_id 与 facts 的直接字段，value 原样复制。
+evidence_refs 只能引用 context.evidence 里的 evidence_id 与 facts 的直接字段，value 原样复制。read_experiment 的指标位于 facts.validation_metrics 中，引用 validation_metrics 时复制完整字典；不能把其 loss 当作 facts 直接字段。
 value 必须保留原始 JSON 类型：数字不能加引号，例如 dimensions 的 32 不可写为 "32"。
 将系统事实与优化推测分开：低验证指标不能直接证明具体误差原因。
-validation 应定义可观测的机制、同数据同种子的父模型对照以及不支持假设的条件。
-不得声称 A/B 合成反馈代表真实线上收益。初始没有实验记忆时不要虚构历史。
+新机制比较用 comparison=same_data_and_seed_against_parent；种子稳定性复查用 same_data_different_seed_stability，并指定新种子、参考候选和比较目标。换种子的单次观测不证明机制优越性。
+不得声称 A/B 合成反馈代表真实线上收益。初始没有实验记忆时不要虚构历史。反馈中的原假设仍是待验证解释，不能因为有记录就当作事实。
 输出严格 json 对象，不加 markdown，不加未定义字段。输出格式如下（填真实 ID/值）：
 {
  "schema_version": 1, "task_id": "上下文 task.task_id", "parent_run_id": "上下文 parent_run_id",
@@ -403,7 +404,7 @@ PYCODE
 
 ### 5.1 准备任务和初始信息
 
-build_context 从父实验 report.json 选择模型描述、验证指标和热门推荐指标，核对 model.pt 摘要后生成 context。任务配置在 configs/brainstorm-task.json，固定优化 NDCG@10，允许在候选 model.py 改表示与打分，在 training.toml 改已有数值参数。固定训练器的 BPR 损失和负采样不开放修改。
+build_context 从父实验 report.json 选择模型描述、验证指标和热门推荐指标，核对 model.pt 摘要后生成 context。任务配置在 configs/brainstorm-task.json，固定优化 NDCG@10，允许在候选 model.py 改表示与打分，在 training.toml 改已有数值参数。损失与负采样通过 training.toml 的已实现策略接口选择。
 
 用下面的命令可以先查看 context，不调用 LLM：
 
@@ -486,3 +487,45 @@ python -m unittest discover -s tests -p 'test_brainstorm*.py' -v
 这个工具尚未实现。你需要：在 SPECS 写用途和参数，在 execute 写读取与计算，返回 source/facts，最后写测试核对数值与读取范围。只要遵守现有返回格式，不需要在 generate_proposals 增加同名分支，它已经通过 execute 调用工具。
 
 [07：Developing](07-developing.md) 已实现读取 proposal.json、修改独立候选文件和真实训练。结构化反馈与查询见 [第09章](09-experiment-memory.md)；跨父模型检索、论文检索、多批探索和自动闭环还没有实现；[05：Evaluation Agent](05-evaluation-agent.md) 说明实验结果怎样交给 LLM 判断。
+
+## 新实验、稳定性复查和训练策略
+
+先确定这轮是在验证新机制，还是验证已有结果对随机种子的敏感程度。新机制尽量保持种子与参考实验相同；稳定性复查保持源码和其他参数相同，只改训练 seed。数据划分始终不变。换一个种子的单次结果仍不能证明稳定性，应汇总多个预先指定的种子。
+
+Brainstorm 的提案 validation.comparison 对应两种目的：新机制使用 same_data_and_seed_against_parent，复查使用 same_data_different_seed_stability。复查计划必须说明参考候选、新种子和比较目标。read_experiment 返回 training_seed、model_source_sha256、training_strategy；read_feedback 的新记录也包含这些信息。旧记录缺失字段时不能假装已知，应读取训练报告或说明证据不足。
+
+### 可修改的训练接口
+
+候选 training.toml 示例：
+
+```toml
+[training]
+dimensions = 32
+learning_rate = 0.001
+batch_size = 1024
+epochs = 20
+l2 = 0.0001
+threads = 1
+seed = 43
+loss = "bpr"
+negative_sampling = "uniform"
+```
+
+| 字段 | 选项 | 实际行为 |
+| --- | --- | --- |
+| loss | bpr | softplus(负例分数−正例分数) |
+| loss | hinge | max(0, 1−正例分数+负例分数) |
+| loss | bce | 正例与负例的二分类逻辑损失平均 |
+| negative_sampling | uniform | 在用户训练未交互物品中均匀抽取 |
+| negative_sampling | popularity | 按训练频次加一后取 0.75 次方加权抽取 |
+| negative_sampling | hard | 从训练未交互池抽 5 个物品，选择当前模型打分最高者 |
+
+这是开放已实现的损失/采样接口，暂不允许 agent 任意重写训练器。实现位于 recommender/strategy.py，train.py 调用 objective 和 sample_negatives，隔离 worker 的 check 也执行所选策略并检查有限标量损失与反向传播。所有策略仍使用相同验证指标和数据协议。新损失保留原 embedding L2 正则。
+
+### 重复实验为什么会被拒绝
+
+DevelopingTools.reject_duplicate 在 train_candidate 之前计算指纹：源码 SHA256、规范化后的全部训练参数（含有效种子与策略）、数据版本。它检查已有根基线和 Developing 训练报告，兼容旧报告隐含的 bpr/uniform 及顶层 seed。完全相同则返回工具错误，附已有训练 ID；未完成训练不会因为缺少报告被当作完成实验。
+
+因此同机制不同种子允许运行；同源码同配置同种子的已完成训练默认不重跑。源码字节变化也会改变指纹，这不是模型语义等价判定，仍需 Brainstorm 根据实验记忆避免无意义的格式修改。并发实验的原子锁暂未实现。
+
+收到重复错误后，Developing 应按提案处理：如果已授权种子复查则修改 seed；如果原提案根本是重复实验，应说明不能完成，不应擅自换机制。换种子不会更新数据划分，也不会修改模拟器的随机种子。
