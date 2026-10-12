@@ -162,8 +162,16 @@ def profile_feedback(model_a, model_b, seed, options, runs, client=None):
     judge = client or DeepSeekClient(options.get('llm_config', 'configs/interest-llm.toml'))
     if scoring == 'yes_no_logprobs':
         from .token_interest import score_token_pairs
-        ratings, audit = score_token_pairs(profiles, catalog, pairs, runs, judge,
-            max_calls=options.get('max_model_calls', 10000), concurrency=options.get('concurrency', 20))
+        input_mode = options.get('input_mode', 'profile')
+        if input_mode == 'history':
+            history_users = json.loads((Path(options['profiles_directory']) / 'users.json').read_text())
+            scoring_inputs = {user['user_id']: user for user in history_users}
+        elif input_mode == 'profile':
+            scoring_inputs = profiles
+        else:
+            raise ValueError('兴趣输入模式须为history或profile')
+        ratings, audit = score_token_pairs(scoring_inputs, catalog, pairs, runs, judge,
+            max_calls=options.get('max_model_calls', 10000), concurrency=options.get('concurrency', 40), input_mode=input_mode)
     elif scoring == 'json_probability':
         ratings, audit = score_pairs(profiles, catalog, pairs, runs, judge, max_calls=options.get('max_model_calls', 240))
     else:
@@ -176,11 +184,11 @@ def profile_feedback(model_a, model_b, seed, options, runs, client=None):
     return feedback, users, {'a_run_id': metadata[0]['run_id'], 'b_run_id': metadata[1]['run_id'],
             'a_source_sha256': metadata[0]['model_source_sha256'], 'b_source_sha256': metadata[1]['model_source_sha256'],
             'a_checkpoint_sha256': metadata[0]['checkpoint_sha256'], 'b_checkpoint_sha256': metadata[1]['checkpoint_sha256'],
-            'dataset_version': state['dataset_version'], 'feedback_oracle': 'fixed LLM user profiles and cached user-item interest',
+            'dataset_version': state['dataset_version'], 'feedback_oracle': 'fixed training histories and cached yes/no confidence' if audit.get('input_mode') == 'history' else 'fixed LLM user profiles and cached user-item interest',
             'ranking_execution': 'macOS sandbox-exec; actual source and checkpoint verified',
             'profiles_run_id': state['run_id'], 'profile_population_sha256': fingerprint(profiles),
             'interest_ratings_sha256': audit['ratings_sha256'], 'interest_audit_directory': audit['directory'],
-            'interest_scoring': scoring, 'interest_concurrency': audit.get('concurrency', 1),
+            'interest_input_mode': audit.get('input_mode', 'profile'), 'interest_scoring': scoring, 'interest_concurrency': audit.get('concurrency', 1),
             'interest_model': audit['model'], 'interest_prompt_sha256': audit['prompt_sha256'],
             'interest_calls': audit['model_calls'], 'cached_interest_pairs': audit['cached_pairs'],
             'position_exponent': exponent, 'caveat': 'LLM simulated interest, uncalibrated probabilities; not real user clicks'}

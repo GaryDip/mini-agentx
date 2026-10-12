@@ -47,5 +47,6 @@ users = 500
 llm_config = "configs/interest-llm.toml"
 max_model_calls = 10000
 scoring = "yes_no_logprobs"
-concurrency = 20
+concurrency = 40
+input_mode = "history"
 position_exponent = 0.5

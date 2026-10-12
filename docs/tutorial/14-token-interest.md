@@ -77,3 +77,5 @@ tests/test_token_interest.py验证yes正分/no负分、候选缺失拒绝、并�
 score_token_pairs新增input_mode="history"，user消息改成user_id、training_history和item，不传画像摘要。历史和画像模式使用不同prompt，因此缓存不会混合。
 
 真实100个独立用户抽查interest-token-b98e46f78327：每人20部训练历史＋1部电影，20路并发、100请求；实际推荐50样本中yes43/no7，低类型匹配50对照中yes13/no37。对照是刻意采样，不是A/B因果比较。约80%分数绝对值超过0.95，仍不能声称概率校准。默认A/B输入没有因此改变。
+
+最新运行配置：configs/abtest-profiles-token.toml 已设置 input_mode="history"、concurrency=40，正式A/B从固定users.json取每人最近20部训练电影，逐用户电影请求，不传画像摘要。此前profile输入和20并发说明属于原配置。旧JSON配置保留，避免运行中改变环境。缓存身份包含原始历史及专用prompt，可复用100样本实测中相同的历史电影组合。
