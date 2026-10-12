@@ -40,6 +40,19 @@ class BudgetClient:
         self.activity.record('LLM调用用量', agent=self.stage, result=metadata)
         return output, metadata
 
+    def complete_tools(self, messages, tools, tool_choice='auto'):
+        if self.state['model_calls'] >= self.state['max_model_calls']:
+            raise LLMError('工作流总模型调用预算耗尽')
+        self.calls += 1
+        self.state['model_calls'] += 1
+        self.save()
+        path = self.directory / f"round-{self.activity.round_number:02}-{self.stage}-request-{self.calls:02}.json"
+        path.write_text(json.dumps({'messages': messages, 'tools': tools, 'tool_choice': tool_choice}, ensure_ascii=False, indent=2))
+        self.activity.record('发送LLM请求', agent=self.stage, result={'request_file': str(path), 'protocol': 'native_function_calling'})
+        response, metadata = self.client.complete_tools(messages, tools, tool_choice=tool_choice)
+        self.activity.record('LLM调用用量', agent=self.stage, result=metadata)
+        return response, metadata
+
 
 def iterate(root, runs, baseline_run, rounds, clients, task='configs/brainstorm-task.json',
             ab_config='configs/abtest.toml', max_model_calls=None):

@@ -9,20 +9,23 @@ SYSTEM_PROMPT = """你是 Mini AgentX 的 Developing Agent。实现用户提供�
 仅修改候选文件，保持 MatrixFactorization(users, items, dimensions)、users/items embedding、score、score_all 接口。
 数据划分和指标不可改。training.toml 支持六个训练参数及 seed、loss、negative_sampling。loss=bpr/hinge/bce；negative_sampling=uniform/popularity/hard。
 训练工具拒绝同源码同配置同种子的已完成实验。稳定性复查仅更换 seed；不要未经提案授权改变机制来绕过重复检查。
-每次返回一个 JSON action：
-{"action":"tool","name":"工具名","arguments":{},"reason":"简短的目的与依据"}
+使用原生 function calling，每次调用一个注册工具。reason 参数给出简短目的与依据，不在普通回复里输出 action JSON。
 工具名和参数必须遵守工具定义；write_candidate_file 的 content 是完整文件文本。
 修改后先 check_candidate，再 train_candidate，再 read_training_result 与 get_candidate_diff。
 检查或训练失败时依据错误有限修复。指标下降也如实报告，不擅自另换优化机制。
-完成时返回 {"action":"finish","reason":"说明修改与实际训练结果及未验证的限制"}。
+完成时调用 finish(reason)，说明修改、实际训练结果和限制。
 finish 不等于方案提升；程序会检查当前文件版本及训练产物。不能编造指标或读取测试信息。
 reason 是公开简短行动说明，不是内部思维链。"""
 
 
 def develop(tools, client, activity=None):
+    from mini_agentx.llm.function_calling import native_agent
+    client = native_agent(client, tools.SPECS, "finish")
     directory = tools.directory
+    if hasattr(client, "request_directory"):
+        client.request_directory = directory
     activity = ActivityLog(directory, "Developing", parent=activity)
-    prompt = SYSTEM_PROMPT + "\n工具定义：" + json.dumps(tools.SPECS, ensure_ascii=False)
+    prompt = SYSTEM_PROMPT
     initial = {"task": tools.task.__dict__, "proposal": tools.proposal,
                "parent_run_id": tools.parent["run_id"], "dataset_version": tools.parent["dataset_version"],
                "parent_validation_metrics": tools.parent["validation_metrics"],
@@ -44,7 +47,8 @@ def develop(tools, client, activity=None):
         # Store exact messages before every request for tutorial inspection.
         (directory / f"request-{index + 1:02}.json").write_text(json.dumps(messages, ensure_ascii=False, indent=2))
         try:
-            action, metadata = client.complete(messages)
+            request_messages = [*messages, {"role": "user", "content": json.dumps({"runtime_budget": {"tool_allowed": calls < max_tools and max_calls - index > 1, "model_calls_remaining": max_calls - index, "tool_calls_remaining": max_tools - calls}}, ensure_ascii=False)}]
+            action, metadata = client.complete(request_messages)
         except LLMError as error:
             attempts.append({"status": "api_failed", "error": str(error)})
             activity.record("模型调用失败", result={"error": str(error)})

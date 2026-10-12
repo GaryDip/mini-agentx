@@ -1,5 +1,7 @@
 # 06：实现 Brainstorm Agent
 
+> 当前版本已使用 DeepSeek 原生 function calling。本文早期运行记录中的 action JSON 属于旧版示例；新请求的真实格式与代码路径见本章末尾“原生工具调用”。
+
 ## 这一章的开发流程与经验
 
 实现一个可以调用工具的 agent，可以按下面的顺序做。先把每个组件独立跑通，再接成循环；不需要先选择一个 agent 框架。
@@ -537,3 +539,75 @@ DevelopingTools.reject_duplicate 在 train_candidate 之前计算指纹：源码
 模型调用最多 10 次，工具最多 8 次。程序通常预留最后两次模型调用用于提交 propose 和修复；API 失败也占模型次数，因此即便工具尚有剩余，也可能提前结束调查。tool_allowed=false 时程序不会执行新工具，agent 应直接提交提案。证据不足的方向标记 probe_first/backlog，而不是为了填满 ready 继续调用。
 
 最小调查仍包括模型、父实验和训练统计，有历史反馈时至少读取一条。反馈应选择最相关的一到两条，不要求扫描全部历史。预算提示不保证模型遵守，也不保证提案通过校验；失败仍保留记录，不生成伪造方案。request-NN.json 保存包含实时预算的实际请求，便于学习每一步 prompt。
+
+## 原生工具调用：工具怎样注册、执行和返回
+
+实现 agent 的工具循环，需要准备工具参数结构、调用分发、返回消息、完成条件和预算。这几部分都在程序中明确实现，API 不会直接运行 Python。
+
+当前 Brainstorm 的传输使用 `llm/function_calling.py`，原来的内部动作检查继续保留。生产 DeepSeekClient 提供 complete_tools；离线旧测试桩可以继续提供 complete，但真实 DeepSeek 调用不会降级回普通 action JSON。
+
+### 1. 用 JSON Schema 注册工具
+
+schemas 从 tools.SPECS 生成 API 的 tools 数组，每个工具含名称、描述、参数类型、required 和 additionalProperties=false。所有调用都带 reason，作为日志中的公开目的。文件参数带 enum，例如候选文件只有 model.py、training.toml；Brainstorm 的 read_file 明确列出项目路径，避免把候选相对路径当成项目路径。
+
+```json
+{
+  "type": "function",
+  "function": {
+    "name": "read_candidate_file",
+    "description": "读取候选文件",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "path": {"type": "string", "enum": ["model.py", "training.toml"]},
+        "reason": {"type": "string"}
+      },
+      "required": ["path", "reason"],
+      "additionalProperties": false
+    }
+  }
+}
+```
+
+这是候选文件工具的格式示例。Brainstorm 注册自己的只读工具，Developing 注册候选工具；不会把另一个 agent 的工具全部暴露。提交或完成也注册为 `propose`。propose 的 batch 由原有提案契约做深入校验，API 的 object schema 不代表内容一定正确。
+
+### 2. 模型返回 tool_calls
+
+```json
+{
+  "role": "assistant",
+  "content": null,
+  "tool_calls": [{
+    "id": "call_001",
+    "type": "function",
+    "function": {
+      "name": "read_candidate_file",
+      "arguments": "{\"path\":\"model.py\",\"reason\":\"确认模型接口\"}"
+    }
+  }]
+}
+```
+
+arguments 是 JSON 字符串，需要解析和校验。程序检查注册名称、必填字段、额外字段、参数类型和枚举，再交给原来的工具执行器；路径、预算、资源和状态检查继续生效。
+
+每轮只接受一个调用，多个调用不会执行任何工具，作为协议错误处理。普通文本、截断输出、未知工具和错误参数也不会执行。thinking 保持 disabled，使用 tool_choice=required；预算要求收尾时指定 `propose` 工具。这里没有启用 Beta strict 模式，不声称 API 会保证参数正确。
+
+### 3. 工具结果必须通过 tool 消息返回
+
+```json
+{
+  "role": "tool",
+  "tool_call_id": "call_001",
+  "content": "{\"tool_result\":{\"content\":\"文件内容\"}}"
+}
+```
+
+下一次请求包含原始 assistant.tool_calls 和对应 tool 消息。tool_call_id 必须一致；失败也通过对应 tool 消息返回 tool_error。新的任务或实时预算仍使用 user 消息。
+
+FunctionCallingClient 在 API 消息与现有内部动作之间转换：API 传输只用原生消息，内部状态机继续使用经过规范化的 tool/propose/finish 动作。这使本次改动集中在调用协议，而不改写既有实验逻辑。
+
+### 4. 查看实际请求
+
+新的 request-NN.json 保存对象，包含 messages、tools、tool_choice，而不是旧版单独的 messages 数组。trace 记录原始 native_response 和 tool_call_id。统一 activity.md 继续只展示工具动作、返回、修正和决定，不展示请求流量信息。
+
+Evaluation 没有工具循环，继续使用 JSON 输出。工具调用注册、消息角色及参数处理参照 [DeepSeek Tool Calls 文档](https://api-docs.deepseek.com/guides/tool_calls/)。

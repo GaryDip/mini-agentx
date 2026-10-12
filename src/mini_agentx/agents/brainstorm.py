@@ -47,19 +47,23 @@ value 必须保留原始 JSON 类型：数字不能加引号，例如 dimensions
 
 
 def generate_proposals(context_path, runs, client, tools=None, activity=None, destination=None):
+    from mini_agentx.llm.function_calling import native_agent
+    if tools is not None:
+        client = native_agent(client, tools.SPECS, "propose")
     context = json.loads(Path(context_path).read_text())
     validate_context(context)
     destination = Path(destination) if destination is not None else Path(runs) / ("brainstorm-" + uuid.uuid4().hex[:12])
     destination.mkdir(parents=True)
+    if hasattr(client, "request_directory"):
+        client.request_directory = destination
     activity = ActivityLog(destination, parent=activity)
     activity.record("开始任务", result={"parent_run_id": context["parent_run_id"], "task": context["task"]})
     (destination / "context.json").write_text(json.dumps(context, ensure_ascii=False, indent=2) + "\n")
     tool_prompt = ""
     if tools is not None:
-        tool_prompt = """\n现在使用 JSON 工具协议自主调查（不是原生 function calling）。
-每轮仅输出一种 action：
-{"action":"tool","name":"工具名","arguments":{...},"reason":"简要说明调查目的"}
-或者 {"action":"propose","batch":上述完整提案批次,"reason":"简要说明如何依据观测选择方案"}。
+        tool_prompt = """\n现在使用 API 原生 function calling 调查。调用注册工具；不要在普通回复里输出 action JSON。
+每轮只调用一个函数。调查调用对应工具；提交调用 propose(batch, reason)。
+每个调用在参数 reason 中给出简短公开目的。propose 的 batch 使用上面的提案格式。
 reason 用一到两句公开行动说明，记录目标与依据，不输出内部思维链或长篇推演。
 先 read_file 查看 src/mini_agentx/recommender/model.py，read_experiment 查看 parent_run_id，
 再 training_data_summary 查询训练统计；这些成功后才允许 propose。
@@ -71,7 +75,7 @@ reason 用一到两句公开行动说明，记录目标与依据，不输出内�
 完成关键调查后及时生成提案；历史反馈挑最相关的一到两条，不逐条扫完。
 tool_allowed=false 时只输出 propose，不再调用工具；证据不足的候选标记 probe_first/backlog。
 reserve_proposal_calls 为提案提交和修复预留，不能用于继续调查。
-""" + json.dumps(tools.SPECS, ensure_ascii=False)
+"""
     system_prompt = SYSTEM_PROMPT + tool_prompt
     messages = [{"role": "system", "content": system_prompt},
                 {"role": "user", "content": json.dumps(context, ensure_ascii=False)}]
