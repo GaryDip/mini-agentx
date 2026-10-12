@@ -42,7 +42,7 @@ class ToolLoopTest(unittest.TestCase):
             self.assertEqual(saved["evidence"][-1]["evidence_id"], "tool-3")
             activity = (Path(result["directory"]) / "activity.md").read_text()
             self.assertIn("确认模型接口与表示结构", activity)
-            self.assertLess(activity.index("请求工具：read_file"), activity.index("工具结果：read_file"))
+            self.assertLess(activity.index("调用工具：read_file"), activity.index("**返回：**"))
             self.assertIn("校验通过并完成交接", activity)
 
     def test_propose_without_investigation_fails(self):
