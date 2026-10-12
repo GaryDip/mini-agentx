@@ -64,3 +64,5 @@ Brainstorm 与 Developing 已采用 DeepSeek 原生 function calling（tools / t
 Brainstorm 支持只读目录浏览、文本搜索与发现后读取（源码、配置、文档、测试、示例），可自主调查训练策略实现。
 
 每轮按优先级尝试所有 ready 提案，候选失败不会阻断同批其他方案；批次结束后选择可信 KEEP 候选升级基线。
+
+[教程11：用户画像](docs/tutorial/11-user-profiles.md)：从训练正反馈固定抽取500用户，接入电影元数据并生成可恢复的 DeepSeek 画像；尚未替换 A/B 反馈环境。

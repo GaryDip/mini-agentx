@@ -87,7 +87,34 @@ def main() -> None:
     iterate_parser.add_argument("--brainstorm-llm-config", default="configs/brainstorm-llm.toml")
     iterate_parser.add_argument("--developing-llm-config", default="configs/developing-llm.toml")
     iterate_parser.add_argument("--evaluation-llm-config", default="configs/llm.toml")
+    profile_parser = subparsers.add_parser('user-profiles', help='固定训练用户样本并生成可恢复的LLM画像')
+    profile_parser.add_argument('--config', default='configs/baseline.toml')
+    profile_parser.add_argument('--count', type=int, default=500)
+    profile_parser.add_argument('--min-history', type=int, default=20)
+    profile_parser.add_argument('--history-limit', type=int, default=20)
+    profile_parser.add_argument('--seed', type=int, default=42)
+    profile_parser.add_argument('--prepare-only', action='store_true')
+    profile_parser.add_argument('--directory', help='恢复已有画像目录')
+    profile_parser.add_argument('--llm-config', default='configs/profiles-llm.toml')
+    profile_parser.add_argument('--max-model-calls', type=int, default=100)
     args = parser.parse_args()
+    if args.command == 'user-profiles':
+        from pathlib import Path
+        from mini_agentx.simulation.profiles import prepare_profiles, generate_profiles
+        from mini_agentx.llm.client import DeepSeekClient
+        try:
+            if args.directory:
+                directory = Path(args.directory)
+                result = json.loads((directory / 'status.json').read_text())
+            else:
+                result = prepare_profiles(load_config(args.config), args.count, args.min_history, args.history_limit, args.seed)
+                directory = Path(result['directory'])
+            if not args.prepare_only:
+                result = generate_profiles(directory, DeepSeekClient(args.llm_config), max_model_calls=args.max_model_calls)
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            parser.error(str(error))
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
     if args.command in ("check-config", "prepare-data"):
         try:
             config = load_config(args.config)
