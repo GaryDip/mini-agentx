@@ -15,9 +15,13 @@ class BrainstormTools:
         "configs/baseline.toml",
         "configs/brainstorm-task.json",
     )
+    READ_ROOTS = ("src", "configs", "docs", "tests", "examples")
+    TEXT_SUFFIXES = {".py", ".toml", ".md", ".json"}
     SPECS = {
-        "list_files": {"arguments": {}, "description": "列出可读代码与配置白名单"},
-        "read_file": {"arguments": {"path": "白名单中的项目相对路径"}, "description": "读取代码或配置，不读取其他文件"},
+        "list_directory": {"arguments": {"path": "项目相对目录，例如 src/mini_agentx；. 列出可调查根目录"}, "description": "浏览可调查目录，最多200条，不执行终端命令"},
+        "search_code": {"arguments": {"path": "可调查目录，例如 src/mini_agentx/recommender", "query": "非空文本，按字面匹配"}, "description": "搜索代码或文档，返回文件路径、行号与匹配行，最多50处"},
+        "list_files": {"arguments": {}, "description": "列出常用入口文件与可调查根目录"},
+        "read_file": {"arguments": {"path": "项目相对文件路径，先浏览或搜索发现"}, "description": "读取发现的代码、配置或文档；只限可调查范围，模型入口读取当前父模型快照"},
         "list_experiments": {"arguments": {}, "description": "列出真实训练与模型模式模拟 A/B 的摘要，排除注入场景"},
         "read_experiment": {"arguments": {"run_id": "已列出的实验 ID"}, "description": "读取验证指标或模型模式 A/B 观测，不读取测试结果及模拟真值"},
         "list_feedback": {"arguments": {}, "description": "列出当前父实验和数据版本的反馈摘要，包括失败与待复查记录"},
@@ -43,6 +47,22 @@ class BrainstormTools:
         if not resolved.is_relative_to(base):
             raise ValueError("文件越界")
         return resolved
+
+    def readable(self, relative, directory=False):
+        if not isinstance(relative, str) or not relative or len(relative) > 300:
+            raise ValueError('路径必须是项目相对路径')
+        parts = Path(relative).parts
+        if Path(relative).is_absolute() or any(part in ('.', '..') or part.startswith('.') for part in parts):
+            raise ValueError('不允许绝对路径、隐藏路径或上级目录')
+        if not parts or (parts[0] not in self.READ_ROOTS and relative != 'README.md'):
+            raise ValueError('路径不在可调查范围：src/configs/docs/tests/examples/README.md')
+        target = self.safe_file(self.root, relative)
+        if directory:
+            if not target.is_dir():
+                raise ValueError('不是可调查目录')
+        elif target.suffix not in self.TEXT_SUFFIXES or not target.is_file():
+            raise ValueError('只读取代码、配置和文档文本')
+        return target
 
     def experiment(self, identifier):
         if not isinstance(identifier, str) or not re.fullmatch(r"(?:baseline|ab)-[a-f0-9]{12}", identifier):
@@ -81,13 +101,51 @@ class BrainstormTools:
             summaries = [{key: record[key] for key in ("feedback_id", "mechanism_key", "proposal_id", "final_verdict", "conclusions")}
                          for record in records]
             return "experiment_kb", {"feedback": summaries, "count": len(summaries)}
+        if name == 'list_directory':
+            relative = arguments['path']
+            if relative == '.':
+                return 'system_kb', {'path': '.', 'entries': [{'path': name, 'type': 'directory'} for name in self.READ_ROOTS if (self.root / name).is_dir()], 'truncated': False}
+            target = self.readable(relative, directory=True)
+            entries = []
+            for child in sorted(target.iterdir()):
+                if child.is_symlink() or child.name.startswith('.') or child.name == '__pycache__':
+                    continue
+                if child.is_dir() or child.suffix in self.TEXT_SUFFIXES:
+                    entries.append({'path': child.relative_to(self.root).as_posix(), 'type': 'directory' if child.is_dir() else 'file'})
+            return 'system_kb', {'path': relative, 'entries': entries[:200], 'truncated': len(entries) > 200}
+        if name == 'search_code':
+            target = self.readable(arguments['path'], directory=True)
+            query = arguments['query']
+            if not isinstance(query, str) or not query.strip() or len(query) > 200:
+                raise ValueError('query 须为1..200字符的非空文本')
+            matches, inspected, truncated = [], 0, False
+            for file in sorted(target.rglob('*')):
+                if not file.is_file() or file.suffix not in self.TEXT_SUFFIXES:
+                    continue
+                try:
+                    file = self.readable(file.relative_to(self.root).as_posix())
+                    if file.stat().st_size > 24000:
+                        continue
+                    inspected += 1
+                    if inspected > 200:
+                        truncated = True
+                        break
+                    for number, line in enumerate(file.read_text().splitlines(), 1):
+                        if query in line:
+                            matches.append({'path': file.relative_to(self.root).as_posix(), 'line': number, 'text': line[:500]})
+                            if len(matches) >= 50:
+                                truncated = True
+                                break
+                    if truncated:
+                        break
+                except (ValueError, OSError, UnicodeError):
+                    continue
+            return 'system_kb', {'query': query, 'matches': matches, 'truncated': truncated}
         if name == "list_files":
-            return "system_kb", {"paths": list(self.FILES)}
+            return "system_kb", {"paths": list(self.FILES), 'read_roots': list(self.READ_ROOTS)}
         if name == "read_file":
             path = arguments["path"]
-            if not isinstance(path, str) or path not in self.FILES:
-                raise ValueError("文件不在只读白名单")
-            target = self.safe_file(self.root, path)
+            target = self.readable(path)
             if path == "src/mini_agentx/recommender/model.py":
                 parent_path = self.safe_file(self.runs, f"{self.parent}/report.json")
                 parent_report = json.loads(parent_path.read_text()) if parent_path.exists() else {}

@@ -611,3 +611,21 @@ FunctionCallingClient 在 API 消息与现有内部动作之间转换：API 传�
 native-request-NN.json 保存实际 API 请求对象，包含 messages、tools、tool_choice；request-NN.json 保存内部动作循环的请求上下文。一次 API 返回多个调用时，内部执行步数可能大于实际 API 请求数。trace 记录原始 native_response 和 tool_call_id。统一 activity.md 继续只展示工具动作、返回、修正和决定，不展示请求流量信息。
 
 Evaluation 没有工具循环，继续使用 JSON 输出。工具调用注册、消息角色及参数处理参照 [DeepSeek Tool Calls 文档](https://api-docs.deepseek.com/guides/tool_calls/)。
+
+## 扩展代码调查范围
+
+开发调查工具，先定义需要知道什么，再明确工具输入与返回，最后把结果接回同一证据循环。现在 Brainstorm 可以自主浏览和搜索仓库文本，不再只读取五个固定文件。
+
+| 工具 | 输入 | 返回 |
+| --- | --- | --- |
+| list_directory | path：项目相对目录；. 表示可调查根目录 | entries 中每项含 path、type；最多200项，truncated 表示截断 |
+| search_code | path：调查目录；query：字面搜索文本 | matches 中每项含 path、line、text；最多50处，truncated 表示截断 |
+| read_file | path：发现的文件相对路径 | 文件内容、SHA256、实际来源、父模型ID |
+
+可调查 src、configs、docs、tests、examples 和 README.md。文本类型为 .py/.toml/.md/.json；不读取隐藏路径、上级路径、符号链接、runs、原始数据、权重或 .env。单文件读取上限24KB；搜索最多扫描200个符合条件的文件。目录浏览和字面搜索都由 Python 实现，没有任意 shell 执行。
+
+例如想知道 hard 采样如何实现：先 list_directory(path="src/mini_agentx/recommender")，再 search_code(path="src/mini_agentx/recommender", query="sample_negatives")，最后 read_file(path="src/mini_agentx/recommender/strategy.py")。返回的行号和文本直接出现在 activity.md，也成为可引用的工具证据。
+
+list_files 现在作为常用入口导航，另返回 read_roots。read_file 的 API 参数取消固定路径 enum，具体范围由程序校验，因此新文件也能被发现和读取。模型入口 src/mini_agentx/recommender/model.py 仍读取当前父模型快照；搜索查看的是项目仓库，agent 必须区分两者。
+
+所有调查仍计入工具预算。扩大工具范围不等于扩大候选修改范围；本次不改变训练、评估和交接协议，也不让 Brainstorm 执行训练或写文件。

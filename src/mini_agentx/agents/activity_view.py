@@ -53,6 +53,13 @@ def facts_summary(value, tool=None):
                 lines.append(f'修改 `{name}`：\n```diff\n{diff}\n```')
     if 'experiments' in facts:
         lines.append(f"找到 {len(facts['experiments'])} 个实验。")
+    if 'entries' in facts:
+        lines.extend(f"- `{entry['path']}`（{entry['type']}）" for entry in facts['entries'])
+    if 'matches' in facts:
+        lines.append(f"搜索 `{facts.get('query')}`：{len(facts['matches'])} 处匹配。")
+        lines.extend(f"- `{match['path']}:{match['line']}`：{match['text']}" for match in facts['matches'])
+    if facts.get('truncated'):
+        lines.append('结果达到上限，已截断。')
     if 'paths' in facts:
         lines.append('可读文件：' + '、'.join(facts['paths']) + '。')
     if 'training_config' in facts:

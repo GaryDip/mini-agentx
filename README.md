@@ -60,3 +60,5 @@ mini-agentx check-config --config configs/baseline.toml
 提交源代码、配置模板、教程和脱敏示例。数据、权重、运行日志、数据库及 API 密钥不入 Git。密钥通过环境变量读取，请勿提交 `.env`。
 
 Brainstorm 与 Developing 已采用 DeepSeek 原生 function calling（tools / tool_calls / tool 消息），提交及完成也通过注册函数交接；Evaluation 保持 JSON 评估。
+
+Brainstorm 支持只读目录浏览、文本搜索与发现后读取（源码、配置、文档、测试、示例），可自主调查训练策略实现。

@@ -11,9 +11,6 @@ def schemas(specs, terminal):
         properties = {key: {'type': 'string', 'description': description} for key, description in spec['arguments'].items()}
         if name in ('read_candidate_file', 'write_candidate_file'):
             properties['path']['enum'] = ['model.py', 'training.toml']
-        if name == 'read_file':
-            from mini_agentx.tools.brainstorm import BrainstormTools
-            properties['path']['enum'] = list(BrainstormTools.FILES)
         properties['reason'] = {'type': 'string', 'description': '简短公开行动说明'}
         definitions.append({'type': 'function', 'function': {'name': name, 'description': spec['description'],
             'parameters': {'type': 'object', 'properties': properties, 'required': list(properties), 'additionalProperties': False}}})

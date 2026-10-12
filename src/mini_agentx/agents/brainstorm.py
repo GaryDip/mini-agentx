@@ -67,6 +67,9 @@ def generate_proposals(context_path, runs, client, tools=None, activity=None, de
 reason 用一到两句公开行动说明，记录目标与依据，不输出内部思维链或长篇推演。
 先 read_file 查看 src/mini_agentx/recommender/model.py，read_experiment 查看 parent_run_id，
 再 training_data_summary 查询训练统计；这些成功后才允许 propose。
+可以用 list_directory 浏览 src/configs/docs/tests/examples，search_code 搜索损失、采样和模型接口，再用 read_file 查看发现的文件。
+路径必须是项目相对路径；可先读 src/mini_agentx/recommender/strategy.py 理解策略。浏览与搜索也是工具调用，避免无目标扫描。
+read_file 的模型入口返回当前基线快照；search_code 搜索项目仓库，不能假定搜索出的模型代码等于已采纳基线。
 可以按需要查看训练器、配置、历史实验。
 若 experiment-memory.count 大于0，先 list_feedback，再 read_feedback 至少一条相关记录。
 结合实际观测、复查状态和已尝试配置选方案，不把未验证的解释当作已证实原因，不无理由重复相同实验。工具返回带 evidence_id 的真实证据，后续提案可引用。
