@@ -10,7 +10,7 @@
 
 阅读 [教程路线图 PLAN.md](PLAN.md)，每章包含目标、实现步骤、方法和验收条件。
 
-教程 01 已完成：Python 包结构、命令入口、配置读取和运行目录规范。已实现 BPR-MF 训练和离线评估；模拟 A/B 已接入 DeepSeek Evaluation Agent；Brainstorm 已接入 DeepSeek 只读调查、生成与校验；Developing 已实现候选修改、隔离检查与真实训练；候选 A/B 与 Evaluation 交接已实现；实验反馈存储与 Brainstorm 查询已实现；动态基线的多轮编排、可信 KEEP 后自动升级、模型归档与统一日志已实现，已开放训练 seed、三种损失与三种负采样，并拒绝已完成的完全重复训练；中断恢复尚未实现。
+教程 01 已完成：Python 包结构、命令入口、配置读取和运行目录规范。已实现 BPR-MF 训练和离线评估；模拟 A/B 已接入 DeepSeek Evaluation Agent；Brainstorm 已接入 DeepSeek 只读调查、生成与校验；Developing 已实现候选修改、隔离检查与真实训练；候选 A/B 与 Evaluation 交接已实现；实验反馈存储与 Brainstorm 查询已实现；动态基线的多轮编排、可信 KEEP 后自动升级、模型归档与统一日志已实现，已开放训练 seed、三种损失与三种负采样，并复用已校验的重复训练产物；中断恢复尚未实现。
 
 ## 安装与运行
 
@@ -62,3 +62,5 @@ mini-agentx check-config --config configs/baseline.toml
 Brainstorm 与 Developing 已采用 DeepSeek 原生 function calling（tools / tool_calls / tool 消息），提交及完成也通过注册函数交接；Evaluation 保持 JSON 评估。
 
 Brainstorm 支持只读目录浏览、文本搜索与发现后读取（源码、配置、文档、测试、示例），可自主调查训练策略实现。
+
+每轮按优先级尝试所有 ready 提案，候选失败不会阻断同批其他方案；批次结束后选择可信 KEEP 候选升级基线。

@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import signal
+import shutil
 import subprocess
 import sys
 import tomllib
@@ -98,7 +99,7 @@ class DevelopingTools:
         ast.parse(self.path("model.py").read_text())
         return settings
 
-    def reject_duplicate(self):
+    def find_duplicate(self):
         from mini_agentx.recommender.strategy import experiment_signature
         config = dict(self.parent['config'], training=self.settings())
         signature = experiment_signature(digest(self.path('model.py')), config, self.parent['dataset_version'])
@@ -110,9 +111,32 @@ class DevelopingTools:
                 report = json.loads(path.read_text())
                 previous = experiment_signature(report['model_source_sha256'], report['config'], report['dataset_version'])
                 if previous == signature:
-                    raise ValueError(f'重复实验：已有完成训练 {report["run_id"]}，同源码、配置、种子和数据不重跑。验证稳定性请仅更换 seed；新实验请修改实际机制。')
+                    return path.parent
             except (OSError, KeyError, json.JSONDecodeError):
                 continue
+
+    def reject_duplicate(self):
+        previous = self.find_duplicate()
+        if previous is not None:
+            raise ValueError(f'重复实验：已有完成训练 {previous.name}，同配置不重跑')
+
+    def reuse_training(self, previous):
+        from mini_agentx.memory.store import safe_path
+        previous = safe_path(self.runs, previous)
+        report = json.loads(safe_path(self.runs, previous / 'report.json').read_text())
+        if digest(safe_path(self.runs, previous / 'model.pt')) != report['checkpoint_sha256']:
+            raise ValueError('历史训练权重摘要不匹配，不能复用')
+        if report.get('candidate_source'):
+            source = safe_path(self.runs, previous / 'candidate_model.py')
+            if digest(source) != report['model_source_sha256']:
+                raise ValueError('历史训练源码摘要不匹配，不能复用')
+        run = self.directory / 'training' / report['run_id']
+        run.mkdir(parents=True)
+        shutil.copyfile(previous / 'model.pt', run / 'model.pt')
+        shutil.copyfile(self.path('model.py'), run / 'candidate_model.py')
+        report.update(candidate_source='candidate_model.py', training_reused_from=str(previous))
+        (run / 'report.json').write_text(json.dumps(report, ensure_ascii=False, indent=2))
+        return report
 
     def run_worker(self, mode):
         if sys.platform != "darwin" or not Path("/usr/bin/sandbox-exec").exists():
@@ -185,15 +209,15 @@ class DevelopingTools:
             self.trained = self.report = None
             if self.checked != self.fingerprint():
                 raise ValueError("当前文件尚未通过检查，请先 check_candidate")
-            self.reject_duplicate()
-            self.report = self.run_worker("train")
+            previous = self.find_duplicate()
+            self.report = self.reuse_training(previous) if previous is not None else self.run_worker("train")
             if self.report["dataset_version"] != self.parent["dataset_version"]:
                 self.report = None
                 raise ValueError("训练数据版本不一致")
             self.trained = self.fingerprint()
         if self.report is None or self.trained != self.fingerprint():
             raise ValueError("当前版本没有有效训练结果")
-        return {"run_id": self.report["run_id"], "validation_metrics": self.report["validation_metrics"],
+        return {"run_id": self.report["run_id"], "training_reused_from": self.report.get("training_reused_from"), "validation_metrics": self.report["validation_metrics"],
                 "parent_validation_metrics": self.parent["validation_metrics"],
                 "ndcg_delta": self.report["validation_metrics"]["ndcg@10"] - self.parent["validation_metrics"]["ndcg@10"],
                 "history": self.report["history"], "training_seconds": self.report["training_seconds"],

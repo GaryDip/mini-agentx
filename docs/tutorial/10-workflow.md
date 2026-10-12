@@ -212,3 +212,13 @@ mini-agentx iterate --baseline-run baseline-c30ead6da742 --rounds 5
 ```
 
 最后查看 report.json 的 current_baseline_run 和 promotions，再打开 models/baselines 中已采纳的模型。默认最多 120 次 LLM 请求，遇到失败仍停止；当前不支持断点恢复。
+
+## 批量尝试所有可行提案，重复训练复用历史产物
+
+当前每轮读取 Brainstorm 的完整 proposals.json，按 priority 尝试所有 maturity=ready 的提案。probe_first/backlog 不进入训练。每个候选生成自己的 proposal-NN.json、Developing 目录、候选评估目录及模型归档 models/candidates/round-NN/candidate-NN。一个候选失败记录错误并继续其他候选；如果本轮全部失败，工作流停止；部分失败时显示 completed_with_errors。
+
+所有候选对照本轮开始时的基线，各自评估和反馈入库。本批结束后，从可信 KEEP 候选中选择验证 NDCG 增益最高者升级；未满足 KEEP 的候选不能凭离线提升升级。并列时保留优先级靠前的候选。这是教学选择规则，不等于证明在多重比较下有真实线上收益，模拟 A/B 的限制仍适用。
+
+train_candidate 检查通过后查找同源码、有效配置、种子和数据版本的历史训练。存在时校验权重及候选源码摘要，将权重、源码和报告复制到本次独立训练目录，返回 training_reused_from；不重新训练。摘要错误会拒绝复用。复用的指标仍是原观测，不计为第二次独立验证。A/B 与评估按当前父模型重新执行，不能把旧基线的评估判决照搬。
+
+默认调用预算改为每轮52次（Brainstorm最多10，三个候选各Developing最多12加Evaluation最多2），总上限360次。可以用 --max-model-calls 设置更低预算；达到预算不再发送请求，未完成候选不会被当作成功。旧章节的单候选与每轮24次预算描述属于旧版。主日志末尾的“每个候选的结果”表展示逐个状态，report.json 的 rounds[].candidates 保存所有产物位置与复用来源。

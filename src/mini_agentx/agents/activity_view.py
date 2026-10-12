@@ -41,9 +41,11 @@ def facts_summary(value, tool=None):
         lines.append('验证结果：' + '；'.join(f'{key}={brief(metrics[key])}' for key in ('ndcg@10', 'recall@10') if key in metrics) + '。')
     for key, label in (('ndcg_delta', '相对基线 NDCG 差值'), ('valid', '检查通过'), ('error', '错误'), ('tool_error', '工具错误'), ('errors', '累计错误次数'),
                        ('interactions', '训练交互数'), ('users', '用户数'), ('items', '物品数'),
-                       ('written', '已写入文件'), ('status', '状态')):
+                       ('written', '已写入文件'), ('proposal_id', '提案'), ('candidate', '候选编号'), ('training_reused_from', '复用历史训练'), ('status', '状态')):
         if key in facts:
             lines.append(f'{label}：{brief(facts[key])}。')
+    if isinstance(facts.get('final'), dict):
+        lines.append(f"最终判断：{facts['final'].get('verdict')}；原因：{facts['final'].get('reason')}。")
     primary = facts.get('primary')
     if primary:
         lines.append(f"模拟 CTR 差值：{brief(primary.get('absolute_effect_b_minus_a'))}；95% 区间：{primary.get('ci95')}。")

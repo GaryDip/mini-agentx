@@ -51,3 +51,21 @@ class StrategyTest(unittest.TestCase):
         cumulative = popularity_cumulative(pools, counts)
         actual = sample_negatives(model, users, pools, counts, random.Random(42), 'popularity', cumulative)
         self.assertTrue(torch.equal(expected, actual))
+
+    def test_duplicate_training_reuses_verified_weights_without_worker(self):
+        import json
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as folder:
+            tools = test_developing.DevelopingTest().make_tools(Path(folder))
+            parent = tools.runs / tools.parent['run_id']
+            report = dict(tools.parent, history=[], training_seconds=1)
+            (parent / 'report.json').write_text(json.dumps(report))
+            tools.checked = tools.fingerprint()
+            with patch.object(tools, 'run_worker') as worker:
+                result = tools.execute('train_candidate', {})
+                worker.assert_not_called()
+            self.assertEqual(result['training_reused_from'], str(parent))
+            self.assertTrue((tools.directory / 'training' / parent.name / 'model.pt').exists())
+            (parent / 'model.pt').write_bytes(b'tampered')
+            with self.assertRaisesRegex(ValueError, '摘要不匹配'):
+                tools.reuse_training(parent)

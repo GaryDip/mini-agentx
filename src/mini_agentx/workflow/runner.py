@@ -28,7 +28,10 @@ class BudgetClient:
     def complete(self, messages):
         if self.state['model_calls'] >= self.state['max_model_calls']:
             raise LLMError('工作流总模型调用预算耗尽')
-        self.calls += 1
+        sequence_key = f'{self.activity.round_number}:{self.stage}'
+        sequences = self.state.setdefault('request_sequences', {})
+        self.calls = sequences.get(sequence_key, 0) + 1
+        sequences[sequence_key] = self.calls
         self.state['model_calls'] += 1
         self.save()
         request = self.directory / f"round-{self.activity.round_number:02}-{self.stage}-request-{self.calls:02}.json"
@@ -43,7 +46,10 @@ class BudgetClient:
     def complete_tools(self, messages, tools, tool_choice='auto'):
         if self.state['model_calls'] >= self.state['max_model_calls']:
             raise LLMError('工作流总模型调用预算耗尽')
-        self.calls += 1
+        sequence_key = f'{self.activity.round_number}:{self.stage}'
+        sequences = self.state.setdefault('request_sequences', {})
+        self.calls = sequences.get(sequence_key, 0) + 1
+        sequences[sequence_key] = self.calls
         self.state['model_calls'] += 1
         self.save()
         path = self.directory / f"round-{self.activity.round_number:02}-{self.stage}-request-{self.calls:02}.json"
@@ -60,9 +66,9 @@ def iterate(root, runs, baseline_run, rounds, clients, task='configs/brainstorm-
         raise ValueError('轮数必须在1..5之间')
     if not isinstance(baseline_run, str) or not re.fullmatch(r'baseline-[a-f0-9]{12}', baseline_run):
         raise ValueError('父模型run ID无效')
-    limit = max_model_calls if max_model_calls is not None else rounds * 24
-    if type(limit) is not int or not 1 <= limit <= 120:
-        raise ValueError('总模型调用预算必须在1..120之间')
+    limit = max_model_calls if max_model_calls is not None else rounds * 52
+    if type(limit) is not int or not 1 <= limit <= 360:
+        raise ValueError('总模型调用预算必须在1..360之间')
     root, runs = Path(root).resolve(), Path(runs).resolve()
     parent = runs / baseline_run
     if parent.is_symlink() or not (parent / 'report.json').is_file():
@@ -113,30 +119,68 @@ def iterate(root, runs, baseline_run, rounds, clients, task='configs/brainstorm-
                 activity.record('本轮没有可开发方案，停止后续阶段', result=brainstorm)
                 save()
                 break
-            round_state['stage'] = 'developing'
-            developing_directory = runs / ('developing-' + uuid.uuid4().hex[:12])
-            round_state['developing_directory'] = str(developing_directory)
-            save()
-            tools = DevelopingTools(root, runs, brainstorm_directory / 'proposal.json', directory=developing_directory)
-            developed = develop(tools, BudgetClient(clients['developing'], state, save, activity, 'Developing', directory), activity=activity)
-            candidate_archive = directory / f'models/candidates/round-{index:02}'
-            handoff = json.loads((developing_directory / 'handoff.json').read_text())
-            archive_model(root, runs, Path(handoff['training_run']), candidate_archive)
-            round_state['candidate_archive'] = str(candidate_archive)
-            round_state['stage'] = 'candidate_evaluation'
-            evaluation_directory = runs / ('candidate-evaluation-' + uuid.uuid4().hex[:12])
-            round_state['candidate_evaluation_directory'] = str(evaluation_directory)
-            save()
-            evaluation = run_candidate_evaluation(developing_directory, runs, ab_config,
-                BudgetClient(clients['evaluation'], state, save, activity, 'Evaluation', directory),
-                activity=activity, directory=evaluation_directory)
-            round_state['ab_run_id'] = evaluation['ab_run_id']
-            round_state['final'] = evaluation['assessment']['final']
-            if not evaluation.get('feedback_id'):
-                raise ValueError('实验已评估，但反馈保存失败；停止避免下一轮丢失经验：' + evaluation.get('feedback_error', '缺少反馈ID'))
-            round_state['feedback_id'] = evaluation['feedback_id']
-            decision = {'round': index, 'baseline_run': baseline_run, 'adopted': False,
-                        'final': round_state['final'], 'evaluation_directory': str(evaluation_directory)}
+            batch_path = brainstorm_directory / 'proposals.json'
+            if batch_path.exists():
+                batch = json.loads(batch_path.read_text())
+                proposals = sorted((p for p in batch['proposals'] if p['maturity'] == 'ready'), key=lambda p: p['priority'])
+            else:
+                proposals = [None]  # 兼容只返回交接的离线测试桩。
+            round_state['candidates'] = []
+            successful = []
+            for ordinal, proposal in enumerate(proposals, 1):
+                candidate_state = {'candidate': ordinal, 'proposal_id': proposal['proposal_id'] if proposal else 'selected', 'status': 'running', 'adopted': False}
+                round_state['candidates'].append(candidate_state)
+                proposal_path = brainstorm_directory / 'proposal.json'
+                if proposal is not None:
+                    proposal_path = brainstorm_directory / f'proposal-{ordinal:02}.json'
+                    proposal_path.write_text(json.dumps({'schema_version': 1, 'task': context['task'], 'parent_run_id': baseline_run, 'dataset_version': context['dataset_version'], 'proposal': proposal}, ensure_ascii=False, indent=2))
+                activity.record('开始候选实验', reason='本轮所有 ready 方案独立与当轮基线比较', result={'proposal_id': candidate_state['proposal_id'], 'candidate': ordinal})
+                try:
+                    candidate_state['stage'] = 'developing'
+                    round_state['stage'] = 'developing'
+                    developing_directory = runs / ('developing-' + uuid.uuid4().hex[:12])
+                    candidate_state['developing_directory'] = str(developing_directory)
+                    save()
+                    tools = DevelopingTools(root, runs, proposal_path, directory=developing_directory)
+                    developed = develop(tools, BudgetClient(clients['developing'], state, save, activity, 'Developing', directory), activity=activity)
+                    candidate_archive = directory / f'models/candidates/round-{index:02}/candidate-{ordinal:02}'
+                    handoff = json.loads((developing_directory / 'handoff.json').read_text())
+                    archive_model(root, runs, Path(handoff['training_run']), candidate_archive)
+                    candidate_state['candidate_archive'] = str(candidate_archive)
+                    candidate_state['training_reused_from'] = developed['result'].get('training_reused_from')
+                    candidate_state['stage'] = 'candidate_evaluation'
+                    evaluation_directory = runs / ('candidate-evaluation-' + uuid.uuid4().hex[:12])
+                    candidate_state['candidate_evaluation_directory'] = str(evaluation_directory)
+                    save()
+                    evaluation = run_candidate_evaluation(developing_directory, runs, ab_config,
+                        BudgetClient(clients['evaluation'], state, save, activity, 'Evaluation', directory),
+                        activity=activity, directory=evaluation_directory)
+                    candidate_state['ab_run_id'] = evaluation['ab_run_id']
+                    candidate_state['final'] = evaluation['assessment']['final']
+                    if not evaluation.get('feedback_id'):
+                        raise ValueError('实验已评估，但反馈保存失败；停止避免下一轮丢失经验：' + evaluation.get('feedback_error', '缺少反馈ID'))
+                    candidate_state['feedback_id'] = evaluation['feedback_id']
+                    decision = {'round': index, 'baseline_run': baseline_run, 'adopted': False,
+                                'final': candidate_state['final'], 'evaluation_directory': str(evaluation_directory)}
+                    (candidate_archive / 'decision.json').write_text(json.dumps(decision, ensure_ascii=False, indent=2))
+                    activity.record('候选评估完成，等待批次选择', result={'proposal_id': candidate_state['proposal_id'], 'final': candidate_state['final']})
+                    candidate_state['status'] = 'completed'
+                    candidate_state['ndcg_delta'] = developed['result']['ndcg_delta']
+                    successful.append((candidate_state, evaluation, candidate_archive))
+                except (OSError, ValueError, KeyError, TypeError) as error:
+                    candidate_state.update(status='failed', error=str(error))
+                    activity.record('候选失败，继续其他可行方案', result={'error': str(error), 'proposal_id': candidate_state['proposal_id']})
+                    save()
+                    if state['model_calls'] >= limit:
+                        break
+            if not successful:
+                raise ValueError('本轮没有候选完成评估；查看 candidates 中的逐项错误')
+            # 固定当轮基线，完成整批后才挑选可采纳候选，防止最后一个覆盖更好候选。
+            eligible = [item for item in successful if item[0]['final']['verdict'] == 'KEEP']
+            candidate_state, evaluation, candidate_archive = max(eligible or successful, key=lambda item: item[0]['ndcg_delta'])
+            round_state.update({key: value for key, value in candidate_state.items() if key not in ('candidate', 'proposal_id', 'status')})
+            evaluation_directory = Path(candidate_state['candidate_evaluation_directory'])
+            decision = {'round': index, 'baseline_run': baseline_run, 'adopted': False, 'final': candidate_state['final'], 'proposal_id': candidate_state['proposal_id'], 'evaluation_directory': str(evaluation_directory)}
             if round_state['final']['verdict'] == 'KEEP':
                 assessment = evaluation['assessment']
                 if not (assessment['validation']['citations_verified'] is True and assessment['validation']['agrees_with_rule'] is True
@@ -152,11 +196,12 @@ def iterate(root, runs, baseline_run, rounds, clients, task='configs/brainstorm-
                 state['current_baseline_run'] = upgraded.name
                 state['promoted'] = round_state['adopted'] = True
                 round_state['new_baseline_run'] = upgraded.name
+            candidate_state['adopted'] = decision['adopted']
             (candidate_archive / 'decision.json').write_text(json.dumps(decision, ensure_ascii=False, indent=2))
             activity.record('采纳候选并升级基线' if decision['adopted'] else '保留当前基线', result=decision)
-            round_state['status'] = 'completed'
+            round_state['status'] = 'completed_with_errors' if any(item['status'] == 'failed' for item in round_state['candidates']) else 'completed'
             round_state['stage'] = 'done'
-            activity.record('本轮完成：修改、观测与反馈', result={'ndcg_delta': developed['result']['ndcg_delta'],
+            activity.record('本轮完成：修改、观测与反馈', result={'ndcg_delta': candidate_state['ndcg_delta'],
                              'final': round_state['final'], 'feedback_id': round_state['feedback_id'],
                              'next': '下一轮查询基线链历史反馈，并使用当前已采纳基线'})
             save()
@@ -168,13 +213,17 @@ def iterate(root, runs, baseline_run, rounds, clients, task='configs/brainstorm-
             save()
             break
     if state['status'] == 'running':
-        state['status'] = 'completed'
+        state['status'] = 'completed_with_errors' if any(item['status'] == 'completed_with_errors' for item in state['rounds']) else 'completed'
     activity.round_number = None
     activity.record('工作流结束', result={'status': state['status'], 'model_calls': state['model_calls'], 'rounds': state['rounds']})
     with (directory / 'activity.md').open('a') as file:
         file.write("\n## 按轮查看结果\n\n| 轮次 | 状态 | 最终判断 | 当轮基线 | 是否采纳 | 反馈 |\n| --- | --- | --- | --- | --- | --- |\n")
         for item in state['rounds']:
             file.write(f"| {item['round']} | {item['status']} | {item.get('final', {}).get('verdict', '未评估')} | {item['baseline_run']} | {item['adopted']} | {item.get('feedback_id', '未产生')} |\n")
+        file.write("\n## 每个候选的结果\n\n| 轮次 | 提案 | 状态 | 最终判断 | 是否采纳 |\n| --- | --- | --- | --- | --- |\n")
+        for item in state['rounds']:
+            for candidate in item.get('candidates', []):
+                file.write(f"| {item['round']} | {candidate['proposal_id']} | {candidate['status']} | {candidate.get('final', {}).get('verdict', '未评估')} | {candidate.get('adopted', False)} |\n")
         file.write("\n各阶段原始文件：\n\n")
         for item in state['rounds']:
             for stage in ('brainstorm_directory', 'developing_directory', 'candidate_evaluation_directory'):

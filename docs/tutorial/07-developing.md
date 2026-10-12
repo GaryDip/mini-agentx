@@ -326,3 +326,5 @@ FunctionCallingClient 在 API 消息与现有内部动作之间转换：API 传�
 native-request-NN.json 保存实际 API 请求对象，包含 messages、tools、tool_choice；request-NN.json 保存内部动作循环的请求上下文。一次 API 返回多个调用时，内部执行步数可能大于实际 API 请求数。trace 记录原始 native_response 和 tool_call_id。统一 activity.md 继续只展示工具动作、返回、修正和决定，不展示请求流量信息。
 
 Evaluation 没有工具循环，继续使用 JSON 输出。工具调用注册、消息角色及参数处理参照 [DeepSeek Tool Calls 文档](https://api-docs.deepseek.com/guides/tool_calls/)。
+
+最新去重行为：相同实验不再直接报错停止；train_candidate 会校验已有权重与源码并复制产物，返回 training_reused_from。读取结果、差异和 finish 的要求继续生效。复用不是一次新的独立训练，不能据此声称稳定性提高。

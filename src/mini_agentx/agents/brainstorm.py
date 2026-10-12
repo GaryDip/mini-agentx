@@ -18,7 +18,7 @@ SYSTEM_PROMPT = """你是推荐系统研发的 Brainstorm Agent。
 损失与负采样通过 training.toml 选择已实现接口：loss=bpr/hinge/bce，negative_sampling=uniform/popularity/hard。
 稳定性复查必须明确仅更换训练 seed；同源码、配置、种子和数据的已完成实验不可重复。新实验必须指出实际机制差异。
 必须用 list_experiments/read_experiment 或实验记忆核对历史配置、源码摘要、训练种子，不能将同种子重跑解释为稳定性验证。
-生成 task.candidate_count 个不同机制候选。ready 可直接实施且 probes=[]；
+生成 task.candidate_count 个不同机制候选。所有 ready 方案都会按优先级尝试，不是只实施第一条。ready 可直接实施且 probes=[]；
 probe_first 必须给出阻塞性 probes；backlog 保存当前条件不具备的方向。
 证据不足就标记 probe_first/backlog，不强行制造 ready。
 priority 为唯一正整数，越小越优先。每个候选只验证一个主要机制。
