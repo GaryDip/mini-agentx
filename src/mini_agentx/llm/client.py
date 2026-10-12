@@ -69,13 +69,15 @@ class DeepSeekClient:
                 if choice['finish_reason'] != 'tool_calls':
                     raise LLMError('模型未返回完整工具调用；没有执行工具')
                 calls = message.get('tool_calls')
-                if not isinstance(calls, list) or len(calls) != 1:
-                    raise LLMError('每轮要求一个工具调用；没有执行工具')
-                call = calls[0]
-                if not isinstance(call.get('id'), str) or not call['id'] or call.get('type') != 'function':
-                    raise LLMError('工具调用标识或类型无效')
-                if not isinstance(call['function']['name'], str) or not isinstance(call['function']['arguments'], str):
-                    raise LLMError('工具调用格式无效')
+                if not isinstance(calls, list) or not 1 <= len(calls) <= 8:
+                    raise LLMError('工具调用数量必须为1..8；没有执行工具')
+                identifiers = set()
+                for call in calls:
+                    if not isinstance(call.get('id'), str) or not call['id'] or call.get('type') != 'function' or call['id'] in identifiers:
+                        raise LLMError('工具调用标识、类型或唯一性无效')
+                    identifiers.add(call['id'])
+                    if not isinstance(call['function']['name'], str) or not isinstance(call['function']['arguments'], str):
+                        raise LLMError('工具调用格式无效')
                 output = {'role': 'assistant', 'content': message.get('content'), 'tool_calls': calls}
             else:
                 if choice['finish_reason'] != 'stop':

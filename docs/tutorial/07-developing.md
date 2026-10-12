@@ -305,7 +305,7 @@ schemas 从 tools.SPECS 生成 API 的 tools 数组，每个工具含名称、�
 
 arguments 是 JSON 字符串，需要解析和校验。程序检查注册名称、必填字段、额外字段、参数类型和枚举，再交给原来的工具执行器；路径、预算、资源和状态检查继续生效。
 
-每轮只接受一个调用，多个调用不会执行任何工具，作为协议错误处理。普通文本、截断输出、未知工具和错误参数也不会执行。thinking 保持 disabled，使用 tool_choice=required；预算要求收尾时指定 `finish` 工具。这里没有启用 Beta strict 模式，不声称 API 会保证参数正确。
+建议模型每次选择一个调用，但支持一次响应带多个工具调用（最多8个）。先校验整批参数，再按顺序执行，每个调用仍单独计入工具预算。全部返回以原始调用 ID 关联，发起下一次 API 请求前确保结果齐全。propose/finish 必须单独调用，不能与其他工具混合。普通文本、截断输出、未知工具和错误参数也不会执行。thinking 保持 disabled，使用 tool_choice=required；预算要求收尾时指定 `finish` 工具。这里没有启用 Beta strict 模式，不声称 API 会保证参数正确。
 
 ### 3. 工具结果必须通过 tool 消息返回
 
@@ -323,6 +323,6 @@ FunctionCallingClient 在 API 消息与现有内部动作之间转换：API 传�
 
 ### 4. 查看实际请求
 
-新的 request-NN.json 保存对象，包含 messages、tools、tool_choice，而不是旧版单独的 messages 数组。trace 记录原始 native_response 和 tool_call_id。统一 activity.md 继续只展示工具动作、返回、修正和决定，不展示请求流量信息。
+native-request-NN.json 保存实际 API 请求对象，包含 messages、tools、tool_choice；request-NN.json 保存内部动作循环的请求上下文。一次 API 返回多个调用时，内部执行步数可能大于实际 API 请求数。trace 记录原始 native_response 和 tool_call_id。统一 activity.md 继续只展示工具动作、返回、修正和决定，不展示请求流量信息。
 
 Evaluation 没有工具循环，继续使用 JSON 输出。工具调用注册、消息角色及参数处理参照 [DeepSeek Tool Calls 文档](https://api-docs.deepseek.com/guides/tool_calls/)。

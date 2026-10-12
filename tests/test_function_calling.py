@@ -100,6 +100,27 @@ class CallingTest(unittest.TestCase):
             feedback = next(m for m in messages if m.get('tool_call_id') == 'call4')
             self.assertEqual(feedback['role'], 'tool')
             self.assertIn('校验失败', feedback['content'])
-            actual = json.loads((Path(result['directory']) / 'request-05.json').read_text())
+            actual = json.loads((Path(result['directory']) / 'native-request-05.json').read_text())
             self.assertIn('tools', actual)
             self.assertEqual(actual['tool_choice']['function']['name'], 'propose')
+
+    def test_multiple_calls_execute_sequentially_and_reply_to_each_id(self):
+        stub = NativeStub()
+        original = stub.complete_tools
+        def multi(*args, **kwargs):
+            response, metadata = original(*args, **kwargs)
+            if len(stub.requests) == 1:
+                response['tool_calls'].append({'id': 'call-second', 'type': 'function', 'function': {'name': 'read', 'arguments': '{"path":"training.toml","reason":"读取配置"}'}})
+            return response, metadata
+        stub.complete_tools = multi
+        client = FunctionCallingClient(stub, {'read': {'arguments': {'path': '路径'}, 'description': '读取'}}, 'finish')
+        messages = [{'role': 'system', 'content': '工具任务'}]
+        for _ in range(2):
+            action, metadata = client.complete(messages)
+            messages.extend([{'role': 'assistant', 'content': json.dumps(action, ensure_ascii=False)},
+                             {'role': 'user', 'content': json.dumps({'tool_result': 'ok'})}])
+        self.assertEqual(len(stub.requests), 1)
+        client.complete(messages)
+        sent = stub.requests[-1][0]
+        self.assertEqual([m['tool_call_id'] for m in sent if m['role'] == 'tool'], ['call-1', 'call-second'])
+        self.assertEqual(len([m for m in sent if m['role'] == 'assistant']), 1)

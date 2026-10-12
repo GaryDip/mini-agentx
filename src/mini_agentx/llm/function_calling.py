@@ -1,7 +1,7 @@
 """原生工具调用传输；保留现有 agent 的动作校验与状态机。"""
 import json
 from pathlib import Path
-from collections import defaultdict
+from collections import defaultdict, deque
 from .client import LLMError
 
 
@@ -35,6 +35,7 @@ class FunctionCallingClient:
         self.allowed = set(specs) | {terminal}
         self.request_directory = None
         self.calls = 0
+        self.queue = deque()
 
     def native_messages(self, messages):
         result, used = [], defaultdict(int)
@@ -45,10 +46,11 @@ class FunctionCallingClient:
                 position = used[key]
                 if position >= len(self.responses[key]):
                     raise LLMError('工具消息缺少对应的原生调用记录')
-                native = self.responses[key][position]
+                native, call_id = self.responses[key][position]
                 used[key] += 1
-                result.append(native)
-                pending = native['tool_calls'][0]['id']
+                if native is not None:
+                    result.append(native)
+                pending = call_id
             elif pending is not None:
                 result.append({'role': 'tool', 'tool_call_id': pending, 'content': message['content']})
                 pending = None
@@ -59,24 +61,40 @@ class FunctionCallingClient:
         return result
 
     def complete(self, messages):
-        native = self.native_messages(messages)
-        choice = 'required'
-        # 最后的预算控制可强制提交工具，而非继续调查。
-        try:
-            control = json.loads(messages[-1]['content']).get('runtime_budget', {})
-            if control.get('tool_allowed') is False:
-                choice = {'type': 'function', 'function': {'name': self.terminal}}
-        except (ValueError, TypeError, AttributeError, IndexError):
-            pass
-        self.calls += 1
-        if self.request_directory is not None:
-            path = Path(self.request_directory) / f'request-{self.calls:02}.json'
-            path.write_text(json.dumps({'messages': native, 'tools': self.definitions, 'tool_choice': choice}, ensure_ascii=False, indent=2))
-        response, metadata = self.client.complete_tools(native, self.definitions, tool_choice=choice)
-        calls = response.get('tool_calls', [])
-        if len(calls) != 1:
-            raise LLMError('每轮要求一个原生工具调用；本次没有执行任何工具')
-        call = calls[0]
+        if not self.queue:
+            native = self.native_messages(messages)
+            choice = 'required'
+            try:
+                control = json.loads(messages[-1]['content']).get('runtime_budget', {})
+                if control.get('tool_allowed') is False:
+                    choice = {'type': 'function', 'function': {'name': self.terminal}}
+            except (ValueError, TypeError, AttributeError, IndexError):
+                pass
+            self.calls += 1
+            if self.request_directory is not None:
+                path = Path(self.request_directory) / f'native-request-{self.calls:02}.json'
+                path.write_text(json.dumps({'messages': native, 'tools': self.definitions, 'tool_choice': choice}, ensure_ascii=False, indent=2))
+            response, metadata = self.client.complete_tools(native, self.definitions, tool_choice=choice)
+            calls = response.get('tool_calls', [])
+            if not 1 <= len(calls) <= 8:
+                raise LLMError('工具调用数量必须为1..8；本次没有执行任何工具')
+            identifiers = [item['id'] for item in calls]
+            if len(set(identifiers)) != len(identifiers):
+                raise LLMError('工具调用ID重复；本次没有执行任何工具')
+            if len(calls) > 1 and any(item['function']['name'] == self.terminal for item in calls):
+                raise LLMError('提交或完成必须单独调用，不可与其他工具混合')
+            # 先验证整批参数，再按原顺序交给现有状态机执行。
+            normalized = [self.normalize(call) for call in calls]
+            for index, (call, action) in enumerate(zip(calls, normalized)):
+                item_metadata = metadata if index == 0 else {'protocol': 'native_function_calling', 'queued_tool_call': True}
+                self.queue.append((action, response if index == 0 else None, call['id'], call['function']['name'], item_metadata))
+        action, response, call_id, name, metadata = self.queue.popleft()
+        key = json.dumps(action, ensure_ascii=False)
+        self.responses[key].append((response, call_id))
+        return action, {**metadata, 'tool_call_id': call_id, 'function_name': name,
+                        'protocol': 'native_function_calling', 'native_response': response}
+
+    def normalize(self, call):
         name = call['function']['name']
         if name not in self.allowed:
             raise LLMError('模型请求未注册工具；没有执行')
@@ -102,9 +120,7 @@ class FunctionCallingClient:
             action = {'action': name, **arguments}
         else:
             action = {'action': 'tool', 'name': name, 'arguments': {key: value for key, value in arguments.items() if key != 'reason'}, 'reason': reason}
-        key = json.dumps(action, ensure_ascii=False)
-        self.responses[key].append(response)
-        return action, {**metadata, 'tool_call_id': call['id'], 'function_name': name, 'protocol': 'native_function_calling', 'native_response': response}
+        return action
 
 
 def native_agent(client, specs, terminal):
