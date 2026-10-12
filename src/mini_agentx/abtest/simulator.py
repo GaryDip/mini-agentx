@@ -77,9 +77,18 @@ def simulate(config, scenario, runs, model_a=None, model_b=None):
     if model_a is not None:
         if scenario != "null":
             raise ValueError("模型模式必须使用 null 场景，禁止额外注入收益")
-        from .model_adapter import model_feedback
-        oracle, users, model_metadata = model_feedback(model_a, model_b, seed)
-    assignments = {user: assign_arm(user, seed) for user in range(users)}
+        feedback_options = config.get('feedback', {})
+        if feedback_options.get('backend') not in (None, 'synthetic', 'llm_profiles'):
+            raise ValueError('未知反馈环境backend，不能静默降级')
+        if feedback_options.get('backend') == 'llm_profiles':
+            from mini_agentx.simulation.interest import profile_feedback
+            oracle, user_ids, model_metadata = profile_feedback(model_a, model_b, seed, feedback_options, runs)
+            users = len(user_ids)
+        else:
+            from .model_adapter import model_feedback
+            oracle, users, model_metadata = model_feedback(model_a, model_b, seed)
+            user_ids = list(range(users))
+    assignments = {user: assign_arm(user, seed) for user in (user_ids if oracle is not None else range(users))}
     events = []
     for user, arm in assignments.items():
         user_seed = int(stable_fraction(seed, "events", user) * 2**64)
@@ -130,6 +139,8 @@ def simulate(config, scenario, runs, model_a=None, model_b=None):
     }
     if oracle is not None:
         report["models"] = model_metadata
+        if config.get('feedback', {}).get('backend') == 'llm_profiles':
+            report['caveats'].extend(['LLM interest probabilities are not calibrated human click probabilities.', 'Top-10 slate repeats across sessions; repeated exposure does not add independent users.', 'Latency and error rates remain synthetic, not measured model inference.'])
     (run / "report.json").write_text(json.dumps(report, indent=2) + "\n")
     # Simulator ground truth is separate; it must not enter Evaluation Agent context.
     (run / "simulator_private.json").write_text(json.dumps({

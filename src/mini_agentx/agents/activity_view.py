@@ -41,7 +41,7 @@ def facts_summary(value, tool=None):
         lines.append('验证结果：' + '；'.join(f'{key}={brief(metrics[key])}' for key in ('ndcg@10', 'recall@10') if key in metrics) + '。')
     for key, label in (('ndcg_delta', '相对基线 NDCG 差值'), ('valid', '检查通过'), ('error', '错误'), ('tool_error', '工具错误'), ('errors', '累计错误次数'),
                        ('interactions', '训练交互数'), ('users', '用户数'), ('items', '物品数'),
-                       ('written', '已写入文件'), ('proposal_id', '提案'), ('candidate', '候选编号'), ('training_reused_from', '复用历史训练'), ('status', '状态')):
+                       ('interest_calls', '新增兴趣评价请求'), ('cached_interest_pairs', '复用用户电影评价数'), ('interest_audit_directory', '兴趣评价日志目录'), ('written', '已写入文件'), ('proposal_id', '提案'), ('candidate', '候选编号'), ('training_reused_from', '复用历史训练'), ('status', '状态')):
         if key in facts:
             lines.append(f'{label}：{brief(facts[key])}。')
     if isinstance(facts.get('final'), dict):

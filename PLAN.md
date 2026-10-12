@@ -309,4 +309,4 @@ MovieLens 100K、BPR 矩阵分解、NDCG/Recall、DeepSeek、SQLite、CLI、Git 
 - [x] 扩大训练策略接口：bpr/hinge/bce 损失，uniform/popularity/hard 负采样，保留固定数据与评估协议。
 
 - [x] 用户模拟第一步：固定训练用户、电影元数据、带引用的LLM画像生成与缓存恢复。
-- [ ] 用户模拟下一步：用户画像与曝光电影的兴趣评价、位置概率、点击缓存和A/B接入。
+- [x] 用户模拟下一步：用户画像与曝光电影的兴趣评价、位置概率、兴趣缓存和A/B接入（可选新配置）。

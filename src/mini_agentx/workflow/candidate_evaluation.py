@@ -56,6 +56,8 @@ def run_candidate_evaluation(development, runs, ab_config, client=None, activity
     try:
         activity.record('运行模型模式A/B', result={'a': handoff['parent_run_id'], 'b': report['run_id']})
         ab = simulate(load_ab_config(ab_config), 'null', runs, runs / handoff['parent_run_id'], candidate)
+        if ab.get('models', {}).get('interest_model'):
+            activity.record('画像兴趣评价完成', agent='UserSimulator', result={key: ab['models'][key] for key in ('interest_model', 'interest_calls', 'cached_interest_pairs', 'interest_audit_directory') if key in ab['models']})
         state['ab_run_id'] = ab['experiment_id']
         state['status'] = 'ab_completed'
         save()

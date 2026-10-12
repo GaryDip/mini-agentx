@@ -66,3 +66,5 @@ Brainstorm 支持只读目录浏览、文本搜索与发现后读取（源码、
 每轮按优先级尝试所有 ready 提案，候选失败不会阻断同批其他方案；批次结束后选择可信 KEEP 候选升级基线。
 
 [教程11：用户画像](docs/tutorial/11-user-profiles.md)：从训练正反馈固定抽取500用户，接入电影元数据并生成可恢复的 DeepSeek 画像；尚未替换 A/B 反馈环境。
+
+[教程12：画像模拟A/B](docs/tutorial/12-profile-ab.md)：通过 configs/abtest-profiles.toml 启用固定画像和缓存兴趣概率；使用独立兴趣调用预算，Evaluation流程不变。
