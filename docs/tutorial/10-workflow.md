@@ -73,7 +73,7 @@ child.record 写入本阶段文件后，立即调用 parent.record，并带上�
 
 ## 5. 主日志应该怎样阅读
 
-整次运行入口是 runs/workflow-<id>/activity.md。标题类似：
+整次运行入口是 runs/workflow-YYYYMMDD-HHMMSS-<id>/activity.md。时间为新加坡时间（UTC+08），例如 workflow-20261012-153045-a1b2c3d4e5f6；按目录名称排序即可比较新运行的先后。末尾随机 ID 避免同秒启动时重名。旧运行目录不重命名，继续可读。标题类似：
 
 ```text
 [第1轮 · Brainstorm] 请求工具：read_feedback

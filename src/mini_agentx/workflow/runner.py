@@ -1,5 +1,7 @@
 """三个agent的有界多轮编排；动态基线比较，可信KEEP后晋升。"""
 import json
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 import re
 import uuid
@@ -52,10 +54,12 @@ def iterate(root, runs, baseline_run, rounds, clients, task='configs/brainstorm-
     parent = runs / baseline_run
     if parent.is_symlink() or not (parent / 'report.json').is_file():
         raise ValueError('父实验不存在或为符号链接')
-    directory = runs / ('workflow-' + uuid.uuid4().hex[:12])
+    started_at = datetime.now(ZoneInfo('Asia/Singapore'))
+    directory = runs / ('workflow-' + started_at.strftime('%Y%m%d-%H%M%S') + '-' + uuid.uuid4().hex[:12])
     directory.mkdir(parents=True)
     activity = ActivityLog(directory, '完整工作流')
     state = {'run_id': directory.name, 'directory': str(directory), 'status': 'running',
+             'created_at': started_at.isoformat(), 'timezone': 'Asia/Singapore',
              'baseline_run': baseline_run, 'requested_rounds': rounds, 'rounds': [],
              'model_calls': 0, 'max_model_calls': limit, 'promoted': False,
              'activity_log': str(directory / 'activity.md'), 'current_baseline_run': baseline_run,
