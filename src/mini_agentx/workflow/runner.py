@@ -62,13 +62,13 @@ class BudgetClient:
 
 def iterate(root, runs, baseline_run, rounds, clients, task='configs/brainstorm-task.json',
             ab_config='configs/abtest.toml', max_model_calls=None):
-    if type(rounds) is not int or not 1 <= rounds <= 5:
-        raise ValueError('轮数必须在1..5之间')
+    if type(rounds) is not int or not 1 <= rounds <= 10:
+        raise ValueError('轮数必须在1..10之间')
     if not isinstance(baseline_run, str) or not re.fullmatch(r'baseline-[a-f0-9]{12}', baseline_run):
         raise ValueError('父模型run ID无效')
     limit = max_model_calls if max_model_calls is not None else rounds * 52
-    if type(limit) is not int or not 1 <= limit <= 360:
-        raise ValueError('总模型调用预算必须在1..360之间')
+    if type(limit) is not int or not 1 <= limit <= 600:
+        raise ValueError('总模型调用预算必须在1..600之间')
     root, runs = Path(root).resolve(), Path(runs).resolve()
     parent = runs / baseline_run
     if parent.is_symlink() or not (parent / 'report.json').is_file():

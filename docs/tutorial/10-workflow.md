@@ -122,7 +122,7 @@ mini-agentx iterate --baseline-run baseline-c30ead6da742 --rounds 2 --max-model-
 
 这个命令会发送项目候选代码和证据到已配置的 DeepSeek，并执行本地隔离检查、训练和A/B。仍要求 macOS sandbox-exec，不降级执行。
 
-rounds 范围1..5；默认总调用预算为每轮24次，包含Brainstorm最多10、Developing最多12、Evaluation最多2。可用 max-model-calls 设置更小总预算，总上限120。API失败也计数。各agent内部次数、工具次数和训练超时继续生效；总预算不等价于精确金额预算。
+rounds 范围1..10；默认总调用预算为每轮52次，包含Brainstorm最多10、三个候选各Developing最多12和Evaluation最多2。可用 max-model-calls 设置总预算，总上限600。API失败也计数。各agent内部次数、工具次数和训练超时继续生效；总预算不等价于精确金额预算。
 
 ## 8. 成功与失败怎样保存
 
@@ -211,7 +211,7 @@ Developing 原来总复制项目初始代码。现在先读取父报告的 candi
 mini-agentx iterate --baseline-run baseline-c30ead6da742 --rounds 5
 ```
 
-最后查看 report.json 的 current_baseline_run 和 promotions，再打开 models/baselines 中已采纳的模型。默认最多 120 次 LLM 请求，遇到失败仍停止；当前不支持断点恢复。
+最后查看 report.json 的 current_baseline_run 和 promotions，再打开 models/baselines 中已采纳的模型。五轮默认最多 260 次 LLM 请求，遇到失败仍停止；当前不支持断点恢复。
 
 ## 批量尝试所有可行提案，重复训练复用历史产物
 
@@ -221,4 +221,4 @@ mini-agentx iterate --baseline-run baseline-c30ead6da742 --rounds 5
 
 train_candidate 检查通过后查找同源码、有效配置、种子和数据版本的历史训练。存在时校验权重及候选源码摘要，将权重、源码和报告复制到本次独立训练目录，返回 training_reused_from；不重新训练。摘要错误会拒绝复用。复用的指标仍是原观测，不计为第二次独立验证。A/B 与评估按当前父模型重新执行，不能把旧基线的评估判决照搬。
 
-默认调用预算改为每轮52次（Brainstorm最多10，三个候选各Developing最多12加Evaluation最多2），总上限360次。可以用 --max-model-calls 设置更低预算；达到预算不再发送请求，未完成候选不会被当作成功。旧章节的单候选与每轮24次预算描述属于旧版。主日志末尾的“每个候选的结果”表展示逐个状态，report.json 的 rounds[].candidates 保存所有产物位置与复用来源。
+默认调用预算改为每轮52次（Brainstorm最多10，三个候选各Developing最多12加Evaluation最多2），总上限600次。可以用 --max-model-calls 设置更低预算；达到预算不再发送请求，未完成候选不会被当作成功。旧章节的单候选与每轮24次预算描述属于旧版。主日志末尾的“每个候选的结果”表展示逐个状态，report.json 的 rounds[].candidates 保存所有产物位置与复用来源。
