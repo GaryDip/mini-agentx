@@ -70,3 +70,5 @@ Brainstorm 支持只读目录浏览、文本搜索与发现后读取（源码、
 [教程12：画像模拟A/B](docs/tutorial/12-profile-ab.md)：通过 configs/abtest-profiles.toml 启用固定画像和缓存兴趣概率；使用独立兴趣调用预算，Evaluation流程不变。
 
 [教程13：模型接口](docs/tutorial/13-model-interface.md)：新Recommender自行拥有表示、损失、优化器和训练；框架负责数据、输出检查及权重交接，保留旧MF兼容。
+
+[教程14：token兴趣评分](docs/tutorial/14-token-interest.md)：使用yes/no输出置信度的正负分数，默认20路并发，独立缓存及调用预算。通过 configs/abtest-profiles-token.toml 选择。

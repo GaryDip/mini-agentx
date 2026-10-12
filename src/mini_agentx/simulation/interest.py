@@ -158,8 +158,16 @@ def profile_feedback(model_a, model_b, seed, options, runs, client=None):
     exponent = options.get('position_exponent', .5)
     if type(exponent) not in (int, float) or not math.isfinite(exponent) or not 0 <= exponent <= 2:
         raise ValueError('position_exponent须为0..2有限数')
-    ratings, audit = score_pairs(profiles, catalog, pairs, runs, client or DeepSeekClient(options.get('llm_config', 'configs/interest-llm.toml')),
-                                max_calls=options.get('max_model_calls', 240))
+    scoring = options.get('scoring', 'json_probability')
+    judge = client or DeepSeekClient(options.get('llm_config', 'configs/interest-llm.toml'))
+    if scoring == 'yes_no_logprobs':
+        from .token_interest import score_token_pairs
+        ratings, audit = score_token_pairs(profiles, catalog, pairs, runs, judge,
+            max_calls=options.get('max_model_calls', 10000), concurrency=options.get('concurrency', 20))
+    elif scoring == 'json_probability':
+        ratings, audit = score_pairs(profiles, catalog, pairs, runs, judge, max_calls=options.get('max_model_calls', 240))
+    else:
+        raise ValueError('未知兴趣评分模式，禁止静默切换')
     def feedback(user, arm, session):
         slate = rankings[arm][user]
         position = session % len(slate)
@@ -172,6 +180,7 @@ def profile_feedback(model_a, model_b, seed, options, runs, client=None):
             'ranking_execution': 'macOS sandbox-exec; actual source and checkpoint verified',
             'profiles_run_id': state['run_id'], 'profile_population_sha256': fingerprint(profiles),
             'interest_ratings_sha256': audit['ratings_sha256'], 'interest_audit_directory': audit['directory'],
+            'interest_scoring': scoring, 'interest_concurrency': audit.get('concurrency', 1),
             'interest_model': audit['model'], 'interest_prompt_sha256': audit['prompt_sha256'],
             'interest_calls': audit['model_calls'], 'cached_interest_pairs': audit['cached_pairs'],
             'position_exponent': exponent, 'caveat': 'LLM simulated interest, uncalibrated probabilities; not real user clicks'}

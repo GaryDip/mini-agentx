@@ -39,6 +39,30 @@ class DeepSeekClient:
     def complete_tools(self, messages, tools, tool_choice="auto"):
         return self._complete(messages, tools, tool_choice)
 
+    def binary_logprobs(self, messages):
+        payload = {'model': self.model, 'messages': messages, 'stream': False,
+                   'thinking': {'type': 'disabled'}, 'temperature': 1,
+                   'max_tokens': 4, 'logprobs': True, 'top_logprobs': 20}
+        request = Request(self.config['base_url'] + '/chat/completions', data=json.dumps(payload).encode(),
+                          headers={'Authorization': 'Bearer ' + self._key, 'Content-Type': 'application/json'})
+        started = time.monotonic()
+        try:
+            with urlopen(request, timeout=self.config['timeout_seconds']) as response:
+                body = json.loads(response.read())
+        except HTTPError as error:
+            raise LLMError(f'DeepSeek HTTP {error.code}') from None
+        except (URLError, TimeoutError, OSError):
+            raise LLMError('DeepSeek网络连接或超时失败') from None
+        try:
+            choice = body['choices'][0]
+            if choice['finish_reason'] != 'stop':
+                raise LLMError('二分类输出未完整结束')
+            return {'answer': choice['message']['content'], 'logprobs': choice['logprobs']}, {
+                'model': body.get('model', self.model), 'usage': body.get('usage', {}),
+                'latency_seconds': time.monotonic() - started}
+        except (KeyError, IndexError, TypeError):
+            raise LLMError('二分类API缺少logprobs') from None
+
     def _complete(self, messages, tools=None, tool_choice="auto"):
         payload = {
             "model": self.model, "messages": messages, "stream": False,
