@@ -635,3 +635,5 @@ list_files 现在作为常用入口导航，另返回 read_roots。read_file 的
 工具返回除了 tool_result，还包含 citation_examples：从实际 facts 选取最多三条直接字段引用，保留原始类型和值。比如 tool-2 的 validation_metrics 是字典，引用字段写 validation_metrics，值复制整份字典；不能把 field 写成 facts 或 facts.validation_metrics。示例不是额外证据，也不证明改进机制。
 
 提案校验失败时，修复提示附上本轮真实引用示例；字段不存在会列出可选字段名，不再错误提示期望值为 None。选中的 ready 方案仍必须引用本轮工具证据，格式正确不代表引用与假设的语义关系已被程序证明。
+
+最新模型边界见[教程13](13-model-interface.md)：Recommender自行实现训练和表示，不要求users/items embedding；本章早期固定BPR训练描述为旧接口，仍通过兼容桥支持。

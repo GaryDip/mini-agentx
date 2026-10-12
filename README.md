@@ -68,3 +68,5 @@ Brainstorm 支持只读目录浏览、文本搜索与发现后读取（源码、
 [教程11：用户画像](docs/tutorial/11-user-profiles.md)：从训练正反馈固定抽取500用户，接入电影元数据并生成可恢复的 DeepSeek 画像；尚未替换 A/B 反馈环境。
 
 [教程12：画像模拟A/B](docs/tutorial/12-profile-ab.md)：通过 configs/abtest-profiles.toml 启用固定画像和缓存兴趣概率；使用独立兴趣调用预算，Evaluation流程不变。
+
+[教程13：模型接口](docs/tutorial/13-model-interface.md)：新Recommender自行拥有表示、损失、优化器和训练；框架负责数据、输出检查及权重交接，保留旧MF兼容。

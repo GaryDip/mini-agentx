@@ -310,3 +310,5 @@ MovieLens 100K、BPR 矩阵分解、NDCG/Recall、DeepSeek、SQLite、CLI、Git 
 
 - [x] 用户模拟第一步：固定训练用户、电影元数据、带引用的LLM画像生成与缓存恢复。
 - [x] 用户模拟下一步：用户画像与曝光电影的兴趣评价、位置概率、兴趣缓存和A/B接入（可选新配置）。
+
+- [x] 模型协议解耦：Recommender自有表示、优化器、损失与fit_epoch；统一score/score_all和state_dict交接，兼容旧MF。

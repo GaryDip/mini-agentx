@@ -14,8 +14,10 @@ SYSTEM_PROMPT = """你是推荐系统研发的 Brainstorm Agent。
 证据不证明改进原因或收益；hypothesis 必须标记为待验证，不编造结果、不读取测试标签。
 遵守 allowed_files、constraints、forbidden_changes 和 avoid_set。
 只修改独立候选目录中的 model.py 或 training.toml，不能改评估器、数据、模拟器或编排程序。
-严格依据 system-model 的 change_surface 和 frozen_training_logic：model.py 仅承载模型表示与打分，
-损失与负采样通过 training.toml 选择已实现接口：loss=bpr/hinge/bce，negative_sampling=uniform/popularity/hard。
+模型内部可自由实现：model.py允许新Recommender(num_users,num_items,settings)，自行拥有embedding、优化器、损失、正则化和fit_epoch训练。
+框架只提供训练正反馈ID对，检查score/score_all、有限训练诊断值以及state_dict保存加载一致性。不能用留出标签或反馈环境画像训练。
+旧MF接口保留兼容；新架构使用Recommender与fit_epoch。不强制内积或users/items属性。
+training.toml的loss和negative_sampling是可用配置；新模型应说明如何解释它们，不能声称设置参数就改变了未实现的逻辑。
 稳定性复查必须明确仅更换训练 seed；同源码、配置、种子和数据的已完成实验不可重复。新实验必须指出实际机制差异。
 必须用 list_experiments/read_experiment 或实验记忆核对历史配置、源码摘要、训练种子，不能将同种子重跑解释为稳定性验证。
 生成 task.candidate_count 个不同机制候选。所有 ready 方案都会按优先级尝试，不是只实施第一条。ready 可直接实施且 probes=[]；

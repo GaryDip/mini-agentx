@@ -20,9 +20,9 @@
     "训练负采样不得参考留出标签",
     "候选只能修改独立实验目录中的白名单文件",
     "不能将模拟 A/B 结果声称为真实业务收益",
-    "model.py 修改模型表示和打分；training.toml 可修改六个训练参数、seed、loss、negative_sampling",
-    "loss 支持 bpr/hinge/bce；negative_sampling 支持 uniform/popularity/hard；不可修改评估器或数据协议",
-    "已完成的同源码同配置同种子同数据实验不重跑；稳定性复查仅更换训练 seed，不更换数据划分"
+    "已完成的同源码同配置同种子同数据实验不重跑；稳定性复查仅更换训练 seed，不更换数据划分",
+    "model.py允许Recommender(nn.Module)自有表示和训练；fit_epoch仅接收训练正反馈ID对；输出score与score_all有限一致，推理状态可保存加载",
+    "仅输入用户ID、物品ID及训练正反馈历史；当前接口不提供电影特征、留出交互或模拟器画像"
   ],
   "unknowns": [
     "尚未验证模型误差的具体原因",

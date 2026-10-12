@@ -328,3 +328,5 @@ native-request-NN.json 保存实际 API 请求对象，包含 messages、tools�
 Evaluation 没有工具循环，继续使用 JSON 输出。工具调用注册、消息角色及参数处理参照 [DeepSeek Tool Calls 文档](https://api-docs.deepseek.com/guides/tool_calls/)。
 
 最新去重行为：相同实验不再直接报错停止；train_candidate 会校验已有权重与源码并复制产物，返回 training_reused_from。读取结果、差异和 finish 的要求继续生效。复用不是一次新的独立训练，不能据此声称稳定性提高。
+
+最新模型边界见[教程13](13-model-interface.md)：Recommender自行实现训练和表示，不要求users/items embedding；本章早期固定BPR训练描述为旧接口，仍通过兼容桥支持。

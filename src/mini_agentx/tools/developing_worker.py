@@ -18,35 +18,18 @@ def main():
     spec = importlib.util.spec_from_file_location("candidate_model", candidate / "model.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    cls = module.MatrixFactorization
+    from mini_agentx.recommender.interface import model_class, check_contract
+    cls = model_class(module)
     if mode == "check":
-        model = cls(3, 5, config["training"]["dimensions"])
-        users, items = torch.tensor([0, 1]), torch.tensor([1, 2])
-        score, all_scores = model.score(users, items), model.score_all()
-        if score.shape != (2,) or all_scores.shape != (3, 5):
-            raise ValueError("score/score_all 输出形状错误")
-        if not torch.isfinite(score).all() or not torch.isfinite(all_scores).all():
-            raise ValueError("分数非有限")
-        if not torch.allclose(score, all_scores[users, items], atol=1e-6):
-            raise ValueError("score 与 score_all 不一致")
-        # Fixed trainer needs both embedding lookups for regularization.
-        loss = score.sum() + model.users(users).square().sum() + model.items(items).square().sum()
-        from mini_agentx.recommender.strategy import options, objective, sample_negatives
-        import random
-        strategy = options(config)
-        negatives = sample_negatives(model, users, [[0, 3, 4], [0, 3, 4], [0, 3, 4]], torch.ones(5), random.Random(strategy["seed"]), strategy["negative_sampling"])
-        loss = objective(score, model.score(users, negatives), strategy["loss"]) + loss * 0.001
-        if loss.ndim != 0 or not torch.isfinite(loss):
-            raise ValueError("策略损失必须为有限标量")
-        loss.backward()
-        result = {"valid": True, "score_shape": list(score.shape), "score_all_shape": list(all_scores.shape)}
+        from mini_agentx.recommender.strategy import options
+        result = check_contract(cls, config['training'], options(config)['seed'])
     else:
         from mini_agentx.recommender.train import train
         summary = train(config, model_class=cls, model_source=candidate / "model.py")
         run = Path(config["paths"]["runs"]) / summary["run_id"]
         result = json.loads((run / "report.json").read_text())
         (run / "candidate_model.py").write_text((candidate / "model.py").read_text())
-        result["model"] = "candidate-BPR"
+        result["model"] = cls.__name__
         result["candidate_source"] = "candidate_model.py"
         (run / "report.json").write_text(json.dumps(result, indent=2))
     (candidate.parent / f"{mode}-result.json").write_text(json.dumps(result, indent=2))

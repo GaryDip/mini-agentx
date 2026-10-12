@@ -22,11 +22,13 @@ def main():
     spec = importlib.util.spec_from_file_location('ab_candidate', source)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    model = module.MatrixFactorization(payload['users'], payload['items'], payload['dimensions'])
+    from mini_agentx.recommender.interface import model_class, create_model
+    settings = payload.get('training_settings', {'dimensions': payload['dimensions']})
+    model = create_model(model_class(module), payload['users'], payload['items'], settings)
     model.load_state_dict(torch.load(checkpoint, map_location='cpu', weights_only=True))
     model.eval()
     with torch.no_grad():
-        scores = model.score_all()
+        scores = model.score_all().clone()
     if scores.shape != (payload['users'], payload['items']) or not torch.isfinite(scores).all():
         raise ValueError('评分矩阵形状错误或分数非有限')
     for user, item in payload['train']:

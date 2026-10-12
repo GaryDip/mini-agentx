@@ -31,7 +31,7 @@ def isolated_rankings(run, info, manifest, training):
     payload = {'source': str(source.resolve()), 'checkpoint': str(checkpoint),
                'source_sha256': info['model_source_sha256'], 'checkpoint_sha256': info['checkpoint_sha256'],
                'users': manifest['users'], 'items': manifest['items'],
-               'dimensions': info['config']['training']['dimensions'], 'train': training}
+               'dimensions': info['config']['training']['dimensions'], 'training_settings': info['config']['training'], 'train': training}
     root = Path(__file__).resolve().parents[3]
     with tempfile.TemporaryDirectory(prefix='agentx-ranking-') as temporary:
         directory = Path(temporary).resolve()
