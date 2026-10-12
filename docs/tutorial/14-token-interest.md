@@ -71,3 +71,9 @@ max_model_calls = 10000
 真实12路并发验证interest-token-fef9ade431ea：12对、12请求，完整通过。所有样例回答yes，置信度大多接近1；这不是评分更有区分力的证据。极端自信时某个选项仍可能不进入Top-20，任务会按上述规则拒绝评分。
 
 tests/test_token_interest.py验证yes正分/no负分、候选缺失拒绝、并发上限、去重、缓存恢复不调用API及预算耗尽后保留成功结果。旧画像与A/B流程继续保留。
+
+## 原始训练历史的单电影抽查
+
+score_token_pairs新增input_mode="history"，user消息改成user_id、training_history和item，不传画像摘要。历史和画像模式使用不同prompt，因此缓存不会混合。
+
+真实100个独立用户抽查interest-token-b98e46f78327：每人20部训练历史＋1部电影，20路并发、100请求；实际推荐50样本中yes43/no7，低类型匹配50对照中yes13/no37。对照是刻意采样，不是A/B因果比较。约80%分数绝对值超过0.95，仍不能声称概率校准。默认A/B输入没有因此改变。

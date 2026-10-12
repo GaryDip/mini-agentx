@@ -50,3 +50,16 @@ class TokenTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'预算'):
                 score_token_pairs(profiles,catalog,[(0,i) for i in range(3)],folder,Client(),max_calls=1,concurrency=1)
             self.assertEqual(len(list((Path(folder)/'interest-token-cache').glob('*.json'))),1)
+
+    def test_history_input_contains_one_movie_and_no_profile_or_arm(self):
+        class Client:
+            model='mock'
+            def binary_logprobs(self,messages):
+                data=json.loads(messages[1]['content'])
+                assert set(data)=={'user_id','training_history','item'}
+                assert len(data['training_history'])==20
+                assert data['item']['item_id']==1
+                return output(.1,.9),{}
+        with tempfile.TemporaryDirectory() as folder:
+            result,_=score_token_pairs({0:{'history':[{'item_id':i} for i in range(20)]}},{'1':{'item_id':1,'title':'test'}},[(0,1)],folder,Client(),input_mode='history')
+            self.assertLess(result[0,1]['interest_probability'],.5)
