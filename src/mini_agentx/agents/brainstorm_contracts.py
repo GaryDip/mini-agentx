@@ -102,8 +102,11 @@ class Proposal:
             if not isinstance(reference["evidence_id"], str) or reference["evidence_id"] not in evidence:
                 raise ValueError("引用了不存在的 evidence_id")
             field = text(reference["field"], "field")
-            actual = evidence[reference["evidence_id"]]["facts"].get(field)
-            if field not in evidence[reference["evidence_id"]]["facts"] or not same_value(reference["value"], actual):
+            facts = evidence[reference["evidence_id"]]["facts"]
+            if field not in facts:
+                raise ValueError(f"证据字段不存在：{reference['evidence_id']}.{field}；field 应为 facts 内部直接字段，可选：{', '.join(facts)}；不能写 facts 或 facts.xxx")
+            actual = facts[field]
+            if not same_value(reference["value"], actual):
                 raise ValueError(f"证据字段或数值不匹配：{reference['evidence_id']}.{field}；必须使用原始 JSON 值 {actual!r}（{type(actual).__name__}），不能将数值转成字符串")
         changes = value["changes"]
         if not isinstance(changes, list) or (value["maturity"] == "ready" and not changes):

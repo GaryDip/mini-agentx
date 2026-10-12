@@ -23,6 +23,8 @@ probe_first 必须给出阻塞性 probes；backlog 保存当前条件不具备�
 证据不足就标记 probe_first/backlog，不强行制造 ready。
 priority 为唯一正整数，越小越优先。每个候选只验证一个主要机制。
 evidence_refs 只能引用 context.evidence 里的 evidence_id 与 facts 的直接字段，value 原样复制。read_experiment 的指标位于 facts.validation_metrics 中，引用 validation_metrics 时复制完整字典；不能把其 loss 当作 facts 直接字段。
+选中的 ready 提案必须引用至少一条本轮 tool-* 证据。引用 field 是 facts 内部的直接字段名，不可写 facts 或 facts.xxx。
+工具返回 citation_examples 提供可直接复制的引用；例子只用于格式与定位，选择与假设相关的事实，不以无关引用凑条件。
 value 必须保留原始 JSON 类型：数字不能加引号，例如 dimensions 的 32 不可写为 "32"。
 将系统事实与优化推测分开：低验证指标不能直接证明具体误差原因。
 新机制比较用 comparison=same_data_and_seed_against_parent；种子稳定性复查用 same_data_different_seed_stability，并指定新种子、参考候选和比较目标。换种子的单次观测不证明机制优越性。
@@ -44,6 +46,20 @@ value 必须保留原始 JSON 类型：数字不能加引号，例如 dimensions
 上面的 proposals 只有一个格式示例，实际数量必须满足任务要求。
 示例引用的值仅示范类型，实际必须复制当前上下文中的事实。
 """
+
+
+def citation_examples(evidence):
+    examples = []
+    facts = evidence['facts']
+    preferred = ('validation_metrics', 'training_config', 'observed', 'training_seed', 'training_strategy',
+                 'model_source_sha256', 'interactions', 'items_with_at_most_5_interactions',
+                 'top10_item_interaction_share', 'final_verdict', 'dimensions', 'path', 'sha256')
+    for field in preferred:
+        if field in facts:
+            examples.append({'evidence_id': evidence['evidence_id'], 'field': field, 'value': facts[field]})
+            if len(examples) == 3:
+                break
+    return examples
 
 
 def generate_proposals(context_path, runs, client, tools=None, activity=None, destination=None):
@@ -150,7 +166,8 @@ reserve_proposal_calls 为提案提交和修复预留，不能用于继续调查
                             feedback_read = True
                         if name == "training_data_summary":
                             inspected.add("training")
-                        observation = {"tool_result": evidence}
+                        observation = {"tool_result": evidence, "citation_examples": citation_examples(evidence),
+                                       "citation_rule": "field 必须是 facts 内部直接字段名，不能写 facts；例子值原样复制"}
                     except (ValueError, OSError, KeyError, TypeError) as error:
                         entry.update(status="rejected", error=str(error))
                         observation = {"tool_error": str(error)}
@@ -187,7 +204,8 @@ reserve_proposal_calls 为提案提交和修复预留，不能用于继续调查
             messages.extend([
                 {"role": "assistant", "content": json.dumps(record["response"], ensure_ascii=False)},
                 {"role": "user", "content": f"校验失败：{error}。按原始任务及证据修复。" +
-                 ("保持 action 协议，提案用 propose 包装完整 batch。" if tools is not None else "返回完整 JSON 批次。")},
+                 ("通过 propose 函数提交完整 batch（离线 action 协议则使用 propose 包装）。" if tools is not None else "返回完整 JSON 批次。") +
+                 ("\n本轮真实工具引用示例：" + json.dumps([example for entry in tool_history if entry["status"] == "success" for example in citation_examples(entry["evidence"])], ensure_ascii=False) if tools is not None else "")},
             ])
             continue
         record["status"] = "valid"

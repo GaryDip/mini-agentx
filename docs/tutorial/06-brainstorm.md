@@ -629,3 +629,9 @@ Evaluation 没有工具循环，继续使用 JSON 输出。工具调用注册、
 list_files 现在作为常用入口导航，另返回 read_roots。read_file 的 API 参数取消固定路径 enum，具体范围由程序校验，因此新文件也能被发现和读取。模型入口 src/mini_agentx/recommender/model.py 仍读取当前父模型快照；搜索查看的是项目仓库，agent 必须区分两者。
 
 所有调查仍计入工具预算。扩大工具范围不等于扩大候选修改范围；本次不改变训练、评估和交接协议，也不让 Brainstorm 执行训练或写文件。
+
+### 让证据引用可直接操作
+
+工具返回除了 tool_result，还包含 citation_examples：从实际 facts 选取最多三条直接字段引用，保留原始类型和值。比如 tool-2 的 validation_metrics 是字典，引用字段写 validation_metrics，值复制整份字典；不能把 field 写成 facts 或 facts.validation_metrics。示例不是额外证据，也不证明改进机制。
+
+提案校验失败时，修复提示附上本轮真实引用示例；字段不存在会列出可选字段名，不再错误提示期望值为 None。选中的 ready 方案仍必须引用本轮工具证据，格式正确不代表引用与假设的语义关系已被程序证明。
