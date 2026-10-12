@@ -1,6 +1,7 @@
 """训练策略接口：只接收训练负例池，不接触留出标签。"""
 import hashlib
 import json
+from itertools import accumulate
 import torch
 from torch.nn import functional as F
 
@@ -28,23 +29,24 @@ def objective(positive, negative, name):
     raise ValueError('未知损失')
 
 
-def sample_negatives(model, users, pools, popularity, rng, name):
-    sampled = []
-    for user in users.tolist():
-        pool = pools[user]
-        if name == 'uniform':
-            item = rng.choice(pool)
-        elif name == 'popularity':
-            item = rng.choices(pool, weights=[float(popularity[i] + 1) ** .75 for i in pool], k=1)[0]
-        elif name == 'hard':
-            choices = rng.choices(pool, k=5)
-            with torch.no_grad():
-                scores = model.score(torch.full((5,), user, dtype=torch.long), torch.tensor(choices))
-            item = choices[int(scores.argmax())]
-        else:
-            raise ValueError('未知负采样')
-        sampled.append(item)
-    return torch.tensor(sampled)
+def popularity_cumulative(pools, popularity):
+    weights = [(float(count) + 1) ** .75 for count in popularity.tolist()]
+    return [list(accumulate(weights[item] for item in pool)) for pool in pools]
+
+
+def sample_negatives(model, users, pools, popularity, rng, name, cumulative=None):
+    user_list = users.tolist()
+    if name == 'uniform':
+        return torch.tensor([rng.choice(pools[user]) for user in user_list])
+    if name == 'popularity':
+        cumulative = cumulative if cumulative is not None else popularity_cumulative(pools, popularity)
+        return torch.tensor([rng.choices(pools[user], cum_weights=cumulative[user], k=1)[0] for user in user_list])
+    if name == 'hard':
+        choices = torch.tensor([rng.choices(pools[user], k=5) for user in user_list])
+        with torch.no_grad():
+            scores = model.score(users.repeat_interleave(5), choices.flatten()).reshape(-1, 5)
+        return choices.gather(1, scores.argmax(dim=1, keepdim=True)).flatten()
+    raise ValueError('未知负采样')
 
 
 def experiment_signature(source_hash, config, dataset):

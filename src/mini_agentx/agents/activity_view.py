@@ -39,7 +39,7 @@ def facts_summary(value, tool=None):
     metrics = facts.get('validation_metrics')
     if metrics:
         lines.append('验证结果：' + '；'.join(f'{key}={brief(metrics[key])}' for key in ('ndcg@10', 'recall@10') if key in metrics) + '。')
-    for key, label in (('ndcg_delta', '相对基线 NDCG 差值'), ('valid', '检查通过'), ('error', '错误'),
+    for key, label in (('ndcg_delta', '相对基线 NDCG 差值'), ('valid', '检查通过'), ('error', '错误'), ('tool_error', '工具错误'), ('errors', '累计错误次数'),
                        ('interactions', '训练交互数'), ('users', '用户数'), ('items', '物品数'),
                        ('written', '已写入文件'), ('status', '状态')):
         if key in facts:

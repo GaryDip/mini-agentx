@@ -101,7 +101,7 @@ def develop(tools, client, activity=None):
     (directory / "trace.json").write_text(json.dumps({"system_prompt": prompt, "initial": initial, "attempts": attempts}, ensure_ascii=False, indent=2))
     (directory / "status.json").write_text(json.dumps({"status": "developed" if result else "failed", "model_calls": len(attempts), "tool_calls": calls}))
     if result is None:
-        activity.record("开发失败", result={"errors": errors})
+        activity.record("开发失败", result={"errors": errors, "error": next((item.get("error") for item in reversed(attempts) if item.get("error")), "预算内未完成有效开发交接")})
         raise ValueError(f"Developing 失败，见 {directory}/activity.md")
     result["activity_log"] = str(directory / "activity.md")
     (directory / "handoff.json").write_text(json.dumps(result, ensure_ascii=False, indent=2))

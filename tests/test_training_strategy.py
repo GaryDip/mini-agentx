@@ -4,7 +4,7 @@ import tempfile
 import unittest
 import torch
 from mini_agentx.recommender.model import MatrixFactorization
-from mini_agentx.recommender.strategy import objective, sample_negatives, experiment_signature, options
+from mini_agentx.recommender.strategy import objective, sample_negatives, experiment_signature, options, popularity_cumulative
 import test_developing
 
 
@@ -40,3 +40,14 @@ class StrategyTest(unittest.TestCase):
             self.assertEqual(tools.settings()['seed'], 43)
             tools.path('training.toml').write_text(tools.original['training.toml'].replace('"bpr"', '"bce"').replace('"uniform"', '"hard"'))
             tools.reject_duplicate()
+
+    def test_cached_popularity_preserves_sampling_distribution_and_seed(self):
+        pools = [[1, 2, 3], [0, 2]]
+        counts = torch.tensor([4., 20., 2., 9.])
+        users = torch.tensor([0, 1] * 50)
+        model = MatrixFactorization(2, 4, 3)
+        rng = random.Random(42)
+        expected = torch.tensor([rng.choices(pools[user], weights=[float(counts[item] + 1) ** .75 for item in pools[user]], k=1)[0] for user in users.tolist()])
+        cumulative = popularity_cumulative(pools, counts)
+        actual = sample_negatives(model, users, pools, counts, random.Random(42), 'popularity', cumulative)
+        self.assertTrue(torch.equal(expected, actual))

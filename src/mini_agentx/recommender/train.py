@@ -11,7 +11,7 @@ from torch.nn import functional as F
 
 from .evaluate import load_data, ranking_metrics
 from .model import MatrixFactorization
-from .strategy import options, objective, sample_negatives, experiment_signature
+from .strategy import options, objective, sample_negatives, experiment_signature, popularity_cumulative
 
 
 def train(config, model_class=None, model_source=None):
@@ -45,6 +45,7 @@ def train(config, model_class=None, model_source=None):
     popularity = torch.zeros(manifest["items"])
     for _, item in splits["train"]:
         popularity[item] += 1
+    cumulative = popularity_cumulative(negatives, popularity) if strategy["negative_sampling"] == "popularity" else None
     popular_metrics = ranking_metrics(popularity.expand(manifest["users"], -1),
                                      splits["validation"], splits["train"])
     history = []
@@ -58,7 +59,7 @@ def train(config, model_class=None, model_source=None):
             batch = [splits["train"][index] for index in order[offset:offset + settings["batch_size"]]]
             users = torch.tensor([row[0] for row in batch])
             items = torch.tensor([row[1] for row in batch])
-            sampled = sample_negatives(model, users, negatives, popularity, rng, strategy["negative_sampling"])
+            sampled = sample_negatives(model, users, negatives, popularity, rng, strategy["negative_sampling"], cumulative=cumulative)
             loss = objective(model.score(users, items), model.score(users, sampled), strategy["loss"])
             regularizer = (model.users(users).square().sum() + model.items(items).square().sum()
                            + model.items(sampled).square().sum()) / len(batch)
